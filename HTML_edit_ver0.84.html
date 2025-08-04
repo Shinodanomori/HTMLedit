@@ -524,6 +524,18 @@
         saveBtn.disabled = true;
         activeFilePath = null;
         previewTargetHtmlPath = null;
+        
+        // プロジェクトのベースフォルダパスを取得
+        if (files.length > 0) {
+            const firstFilePath = files[0].webkitRelativePath;
+            const pathParts = firstFilePath.split('/');
+            if (pathParts.length > 1) {
+                projectBaseFolder = pathParts[0] + '/';
+            } else {
+                projectBaseFolder = '';
+            }
+        }
+        
         fileExplorer.innerHTML = '<p class="explorer-placeholder">ファイルを読み込み中...</p>';
         let processedFiles = 0;
 
