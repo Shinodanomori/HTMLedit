@@ -1160,6 +1160,9 @@
             
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
+            document.body.style.pointerEvents = 'none'; // 他の要素への干渉を防ぐ
+            resizeHandle.style.pointerEvents = 'auto'; // ハンドル自身は有効
+            
             console.log("リサイズ開始", {startX, startEditorWidth});
         };
         
@@ -1171,10 +1174,8 @@
             const newEditorWidth = startEditorWidth + deltaX;
             const newEditorWidthPercent = (newEditorWidth / containerWidth) * 100;
             
-            console.log(`リサイズ中: ${newEditorWidthPercent.toFixed(2)}%`);
-            
-            // 制限: 20%から80%の間
-            if (newEditorWidthPercent >= 20 && newEditorWidthPercent <= 80) {
+            // 制限: 15%から85%の間（より広い範囲）
+            if (newEditorWidthPercent >= 15 && newEditorWidthPercent <= 85) {
                 const newPreviewWidthPercent = 100 - newEditorWidthPercent;
                 
                 editorPane.style.width = newEditorWidthPercent + '%';
@@ -1190,6 +1191,7 @@
                 isResizing = false;
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
+                document.body.style.pointerEvents = '';
             }
         };
         
@@ -1222,6 +1224,10 @@
         });
         
         document.addEventListener('touchend', endResize);
+        
+        // ハンドルの可視性を向上させる
+        console.log("✓ リサイズハンドル初期化完了");
+        console.log("ハンドル位置:", resizeHandle.getBoundingClientRect());
         
         // エディタのverticalリサイズ機能を改善
         const htmlWrapper = document.getElementById('html-editor-wrapper');
