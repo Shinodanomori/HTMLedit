@@ -1027,71 +1027,86 @@
         const editorPane = document.querySelector('.editor-pane');
         const previewPane = document.querySelector('.preview-pane-wrapper');
         
+        if (!resizeHandle || !container || !editorPane || !previewPane) {
+            console.error("リサイズに必要な要素が見つかりません");
+            return;
+        }
+        
         let isResizing = false;
+        let startX = 0;
+        let startEditorWidth = 0;
         
         console.log("リサイズハンドル初期化中...");
         
-        resizeHandle.addEventListener('mousedown', (e) => {
-            console.log("リサイズ開始");
+        const startResize = (clientX) => {
             isResizing = true;
+            startX = clientX;
+            startEditorWidth = editorPane.offsetWidth;
+            
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
-            e.preventDefault();
-            e.stopPropagation();
-        });
+            console.log("リサイズ開始", {startX, startEditorWidth});
+        };
         
-        document.addEventListener('mousemove', (e) => {
+        const doResize = (clientX) => {
             if (!isResizing) return;
             
-            const containerRect = container.getBoundingClientRect();
-            const newEditorWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+            const deltaX = clientX - startX;
+            const containerWidth = container.offsetWidth;
+            const newEditorWidth = startEditorWidth + deltaX;
+            const newEditorWidthPercent = (newEditorWidth / containerWidth) * 100;
             
-            console.log(`リサイズ中: ${newEditorWidth.toFixed(2)}%`);
+            console.log(`リサイズ中: ${newEditorWidthPercent.toFixed(2)}%`);
             
             // 制限: 20%から80%の間
-            if (newEditorWidth >= 20 && newEditorWidth <= 80) {
-                editorPane.style.width = newEditorWidth + '%';
-                previewPane.style.width = (100 - newEditorWidth) + '%';
-                console.log(`✓ サイズ更新: Editor ${newEditorWidth.toFixed(2)}%, Preview ${(100 - newEditorWidth).toFixed(2)}%`);
+            if (newEditorWidthPercent >= 20 && newEditorWidthPercent <= 80) {
+                const newPreviewWidthPercent = 100 - newEditorWidthPercent;
+                
+                editorPane.style.width = newEditorWidthPercent + '%';
+                previewPane.style.width = newPreviewWidthPercent + '%';
+                
+                console.log(`✓ サイズ更新: Editor ${newEditorWidthPercent.toFixed(2)}%, Preview ${newPreviewWidthPercent.toFixed(2)}%`);
             }
-        });
+        };
         
-        document.addEventListener('mouseup', (e) => {
+        const endResize = () => {
             if (isResizing) {
                 console.log("リサイズ終了");
                 isResizing = false;
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
             }
+        };
+        
+        // マウスイベント
+        resizeHandle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            startResize(e.clientX);
         });
+        
+        document.addEventListener('mousemove', (e) => {
+            doResize(e.clientX);
+        });
+        
+        document.addEventListener('mouseup', endResize);
         
         // タッチイベントのサポート（モバイル対応）
         resizeHandle.addEventListener('touchstart', (e) => {
-            console.log("タッチリサイズ開始");
-            isResizing = true;
             e.preventDefault();
+            const touch = e.touches[0];
+            startResize(touch.clientX);
         });
         
         document.addEventListener('touchmove', (e) => {
-            if (!isResizing) return;
-            
-            const touch = e.touches[0];
-            const containerRect = container.getBoundingClientRect();
-            const newEditorWidth = ((touch.clientX - containerRect.left) / containerRect.width) * 100;
-            
-            if (newEditorWidth >= 20 && newEditorWidth <= 80) {
-                editorPane.style.width = newEditorWidth + '%';
-                previewPane.style.width = (100 - newEditorWidth) + '%';
+            if (isResizing && e.touches.length > 0) {
+                e.preventDefault();
+                const touch = e.touches[0];
+                doResize(touch.clientX);
             }
-            e.preventDefault();
         });
         
-        document.addEventListener('touchend', () => {
-            if (isResizing) {
-                console.log("タッチリサイズ終了");
-                isResizing = false;
-            }
-        });
+        document.addEventListener('touchend', endResize);
         
         // エディタのverticalリサイズ機能を改善
         const htmlWrapper = document.getElementById('html-editor-wrapper');
