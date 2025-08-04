@@ -962,7 +962,41 @@
     document.getElementById("export-combined").addEventListener("click",() => { downloadFile('combined.html', getFullHtmlContent(), 'text/html;charset=utf-8'); });
     openPreviewBtn.addEventListener("click", () => {
         if (Object.keys(projectFiles).length > 0 && previewTargetHtmlPath) {
-            const blob = new Blob([designPreview.srcdoc], {type: 'text/html'});
+            // プロジェクトファイルが読み込まれている場合、完全なHTMLを再構築
+            const fileData = projectFiles[previewTargetHtmlPath];
+            const bodyContent = (activeFilePath === previewTargetHtmlPath && fileData.type === 'html')
+                ? htmlEditor.value
+                : fileData.originalBody;
+
+            const fullHtmlString = `<!DOCTYPE html><html lang="ja"><head>${fileData.originalHead}</head>${fileData.bodyTag}${bodyContent}</body></html>`;
+            
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(fullHtmlString, "text/html");
+
+            // すべてのリソースをblobURLで置換
+            doc.querySelectorAll('[href], [src]').forEach(el => {
+                const attributeName = el.hasAttribute('href') ? 'href' : 'src';
+                const originalPath = el.getAttribute(attributeName);
+
+                if (!originalPath || originalPath.startsWith('http') || originalPath.startsWith('data:') || originalPath.startsWith('blob:') || originalPath.startsWith('#')) {
+                    return;
+                }
+
+                const resolvedPath = resolveRelativePath(previewTargetHtmlPath, originalPath);
+                if (projectFiles[resolvedPath] && projectFiles[resolvedPath].objectURL) {
+                    el.setAttribute(attributeName, projectFiles[resolvedPath].objectURL);
+                } else {
+                    const matchingPath = Object.keys(projectFiles).find(path => 
+                        path.toLowerCase() === resolvedPath.toLowerCase() && 
+                        projectFiles[path].objectURL
+                    );
+                    if (matchingPath) {
+                        el.setAttribute(attributeName, projectFiles[matchingPath].objectURL);
+                    }
+                }
+            });
+
+            const blob = new Blob([doc.documentElement.outerHTML], {type: 'text/html'});
             const url = URL.createObjectURL(blob);
             window.open(url, '_blank');
         } else {
