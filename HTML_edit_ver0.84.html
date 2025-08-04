@@ -718,13 +718,43 @@
 
     function resolveRelativePath(basePath, relativePath) {
         if (!basePath || !relativePath) return relativePath;
+        
         try {
-            // Create a dummy base URL to correctly resolve relative paths like ../
-            const baseUrl = 'http://dummy.com/' + (basePath.substring(0, basePath.lastIndexOf('/') + 1));
-            const url = new URL(relativePath, baseUrl);
-            return url.pathname.substring(1); // Remove leading '/'
+            // 絶対パス、データURI、blob URL、アンカーはそのまま返す
+            if (relativePath.startsWith('http') || relativePath.startsWith('data:') || 
+                relativePath.startsWith('blob:') || relativePath.startsWith('#') ||
+                relativePath.startsWith('/')) {
+                return relativePath;
+            }
+
+            // プロジェクト内のパス解決を改善
+            const baseDir = basePath.substring(0, basePath.lastIndexOf('/') + 1);
+            
+            // 相対パスの正規化
+            let resolvedPath = baseDir + relativePath;
+            
+            // "./" と "../" を処理
+            const pathSegments = resolvedPath.split('/').filter(segment => segment !== '');
+            const normalizedSegments = [];
+            
+            for (const segment of pathSegments) {
+                if (segment === '.') {
+                    // 現在のディレクトリ（無視）
+                    continue;
+                } else if (segment === '..') {
+                    // 親ディレクトリ（一つ上に戻る）
+                    if (normalizedSegments.length > 0) {
+                        normalizedSegments.pop();
+                    }
+                } else {
+                    normalizedSegments.push(segment);
+                }
+            }
+            
+            return normalizedSegments.join('/');
+            
         } catch (e) {
-            console.error("Could not resolve path:", {basePath, relativePath});
+            console.error("Could not resolve path:", {basePath, relativePath, error: e});
             return relativePath;
         }
     }
