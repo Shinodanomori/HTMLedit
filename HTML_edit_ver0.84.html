@@ -1009,11 +1009,15 @@
         
         let isResizing = false;
         
+        console.log("リサイズハンドル初期化中...");
+        
         resizeHandle.addEventListener('mousedown', (e) => {
+            console.log("リサイズ開始");
             isResizing = true;
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
             e.preventDefault();
+            e.stopPropagation();
         });
         
         document.addEventListener('mousemove', (e) => {
@@ -1022,18 +1026,50 @@
             const containerRect = container.getBoundingClientRect();
             const newEditorWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
             
+            console.log(`リサイズ中: ${newEditorWidth.toFixed(2)}%`);
+            
             // 制限: 20%から80%の間
             if (newEditorWidth >= 20 && newEditorWidth <= 80) {
                 editorPane.style.width = newEditorWidth + '%';
                 previewPane.style.width = (100 - newEditorWidth) + '%';
+                console.log(`✓ サイズ更新: Editor ${newEditorWidth.toFixed(2)}%, Preview ${(100 - newEditorWidth).toFixed(2)}%`);
             }
         });
         
-        document.addEventListener('mouseup', () => {
+        document.addEventListener('mouseup', (e) => {
             if (isResizing) {
+                console.log("リサイズ終了");
                 isResizing = false;
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
+            }
+        });
+        
+        // タッチイベントのサポート（モバイル対応）
+        resizeHandle.addEventListener('touchstart', (e) => {
+            console.log("タッチリサイズ開始");
+            isResizing = true;
+            e.preventDefault();
+        });
+        
+        document.addEventListener('touchmove', (e) => {
+            if (!isResizing) return;
+            
+            const touch = e.touches[0];
+            const containerRect = container.getBoundingClientRect();
+            const newEditorWidth = ((touch.clientX - containerRect.left) / containerRect.width) * 100;
+            
+            if (newEditorWidth >= 20 && newEditorWidth <= 80) {
+                editorPane.style.width = newEditorWidth + '%';
+                previewPane.style.width = (100 - newEditorWidth) + '%';
+            }
+            e.preventDefault();
+        });
+        
+        document.addEventListener('touchend', () => {
+            if (isResizing) {
+                console.log("タッチリサイズ終了");
+                isResizing = false;
             }
         });
         
