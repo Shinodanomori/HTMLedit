@@ -17,6 +17,21 @@
         .editor-pane { width: 50%; padding: 15px; background-color: var(--editor-bg); border-right: 2px solid var(--border-color); overflow-y: auto; }
         .preview-pane-wrapper { width: 50%; padding: 0; position: relative; }
         .preview-pane-wrapper iframe { width: 100%; flex-grow: 1; border: none; background-color: #fff; }
+        
+        /* リサイズ用のハンドル */
+        .resize-handle {
+            position: absolute;
+            top: 0;
+            right: -5px;
+            width: 10px;
+            height: 100%;
+            background: transparent;
+            cursor: col-resize;
+            z-index: 500;
+        }
+        .resize-handle:hover {
+            background: rgba(0, 123, 255, 0.3);
+        }
         #open-preview-btn {
             position: absolute; top: 10px; right: 10px; z-index: 1000; background-color: var(--primary-color);
             color: white; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 20px;
