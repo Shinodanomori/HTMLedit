@@ -16,23 +16,6 @@
         .editor-pane, .preview-pane-wrapper { box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; }
         .editor-pane { width: 50%; padding: 15px; background-color: var(--editor-bg); border-right: 2px solid var(--border-color); overflow-y: auto; }
         .preview-pane-wrapper { width: 50%; padding: 0; position: relative; }
-        
-        /* リサイズ用のハンドル */
-        .resize-handle {
-            position: absolute;
-            top: 0;
-            right: -5px;
-            width: 10px;
-            height: 100%;
-            background: transparent;
-            cursor: col-resize;
-            z-index: 500;
-        }
-        .resize-handle:hover {
-            background: rgba(0, 123, 255, 0.3);
-        }
-        
-        .preview-pane-wrapper { padding: 0; position: relative; }
         .preview-pane-wrapper iframe { width: 100%; flex-grow: 1; border: none; background-color: #fff; }
         #open-preview-btn {
             position: absolute; top: 10px; right: 10px; z-index: 1000; background-color: var(--primary-color);
