@@ -802,12 +802,16 @@
                     return; // Skip absolute paths, data URIs, blob URLs, and anchors
                 }
 
+                console.log(`Processing path: ${originalPath} from ${previewTargetHtmlPath}`);
+
                 // Resolve the path relative to the current HTML file
                 const resolvedPath = resolveRelativePath(previewTargetHtmlPath, originalPath);
+                console.log(`Resolved to: ${resolvedPath}`);
 
                 // If a corresponding blob URL exists in our project files, use it
                 if (projectFiles[resolvedPath] && projectFiles[resolvedPath].objectURL) {
                     el.setAttribute(attributeName, projectFiles[resolvedPath].objectURL);
+                    console.log(`✓ Found blob URL for: ${resolvedPath}`);
                 } else {
                     // プロジェクトフォルダ内でファイルを検索（大文字小文字を区別しない）
                     const matchingPath = Object.keys(projectFiles).find(path => 
@@ -817,9 +821,10 @@
                     
                     if (matchingPath) {
                         el.setAttribute(attributeName, projectFiles[matchingPath].objectURL);
+                        console.log(`✓ Found blob URL (case insensitive) for: ${matchingPath}`);
                     } else {
-                        console.warn(`Could not find a loaded file for path: ${originalPath} (resolved to: ${resolvedPath})`);
-                        console.log('Available files:', Object.keys(projectFiles).filter(p => projectFiles[p].objectURL));
+                        console.warn(`✗ Could not find a loaded file for path: ${originalPath} (resolved to: ${resolvedPath})`);
+                        console.log('Available files with blob URLs:', Object.keys(projectFiles).filter(p => projectFiles[p].objectURL));
                     }
                 }
             });
