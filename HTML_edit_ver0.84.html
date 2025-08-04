@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>【AI Assistant Pro】直感的HTML/CSSエディタ</title>
+    <style>
+        :root {
+            --primary-color: #007bff; --primary-color-darker: #0056b3; --secondary-color: #6c757d;
+            --success-color: #28a745; --warning-color: #ffc107; --info-color: #17a2b8;
+            --bg-color: #f8f9fa; --editor-bg: #ffffff; --border-color: #dee2e6;
+            --highlight-bg: rgba(255, 255, 0, 0.4);
+        }
+        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; background-color: var(--bg-color); }
+        .container { display: flex; height: 100vh; }
+        .editor-pane, .preview-pane-wrapper { width: 50%; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; }
+        .editor-pane { padding: 15px; background-color: var(--editor-bg); border-right: 2px solid var(--border-color); overflow-y: auto; }
+        
+        .preview-pane-wrapper { padding: 0; position: relative; }
+        .preview-pane-wrapper iframe { width: 100%; flex-grow: 1; border: none; background-color: #fff; }
+        #open-preview-btn {
+            position: absolute; top: 10px; right: 10px; z-index: 100; background-color: var(--primary-color);
+            color: white; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 20px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: background-color 0.2s;
+        }
+        #open-preview-btn:hover { background-color: var(--primary-color-darker); }
+
+        h2 { margin-top: 0; margin-bottom: 10px; color: #333; font-size: 1.3em; border-bottom: 2px solid var(--primary-color); padding-bottom: 5px; flex-shrink: 0; }
+        .editor-wrapper { position: relative; flex-shrink: 0; background-color: white; border: 1px solid #ccc; border-radius: 4px; overflow: hidden; }
+        .editor-highlighter, .editor-textarea { margin: 0; padding: 10px; box-sizing: border-box; width: 100%; height: 100%; font-family: monospace; font-size: 14px; line-height: 1.5; white-space: pre; overflow: auto; }
+        .editor-highlighter { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; overflow-wrap: break-word; }
+        .editor-textarea { position: relative; z-index: 2; background: transparent; color: inherit; resize: vertical; border: none; }
+        .editor-textarea:focus { outline: none; }
+        .highlighted-line { background-color: var(--highlight-bg); display: block; }
+        #html-editor-wrapper { height: 200px; }
+        #css-editor-wrapper { min-height: 150px; }
+
+        .controls { margin-bottom: 15px; flex-shrink: 0; }
+        .controls button { background-color: var(--primary-color); color: white; border: none; padding: 6px 10px; margin: 2px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; transition: background-color 0.2s, opacity 0.2s; vertical-align: middle; }
+        .controls button:hover { opacity: 0.85; }
+        .controls button:disabled { background-color: #a0a0a0; cursor: not-allowed; opacity: 0.7; }
+        .undo-redo-controls { margin-bottom: 10px; display: flex; gap: 5px; }
+        .undo-redo-controls button { flex-grow: 1; background-color: var(--secondary-color); font-size: 14px; padding: 8px; }
+        #save-btn { flex-grow: 2; background-color: var(--success-color); }
+        .accordion-panel h4.prop-group-heading { font-size: 0.8em; color: var(--secondary-color); margin: 12px 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--border-color); }
+        .input-group { margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .input-group label { font-weight: bold; font-size: 0.9em; color: var(--secondary-color); flex-shrink: 0;}
+        .input-group input[type="text"], .input-group input[type="password"], .input-group select { flex-grow: 1; padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        #end-tag-toggle { width: 40px; font-weight: bold; }
+        #end-tag-toggle.active { background-color: var(--warning-color); color: black; }
+        #insert-class-btn { background-color: var(--success-color); }
+        #insert-id-btn { background-color: var(--warning-color); color:black; }
+        .dropdown { position: relative; display: inline-flex; vertical-align: middle; margin: 3px 2px; }
+        .dropdown button { margin: 0; padding-top: 8px; padding-bottom: 8px; }
+        #heading-btn { border-radius: 5px 0 0 5px; border-right: 1px solid var(--primary-color-darker); }
+        .dropdown-toggle { padding: 8px 10px; border-radius: 0 5px 5px 0; }
+        .dropdown-content { display: none; position: absolute; background-color: #f1f1f1; min-width: 160px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); z-index: 10; border-radius: 4px; padding: 5px 0; top: 105%; }
+        .dropdown-content a { color: black; padding: 8px 16px; text-decoration: none; display: block; margin: 0; }
+        .dropdown-content a:hover { background-color: #ddd; }
+        .show { display: block; }
+        .accordion-header { width: 100%; background-color: #e9ecef; color: #495057; text-align: left; padding: 10px 15px; font-size: 1em; font-weight: bold; border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .accordion-header:hover { background-color: #dce1e6; }
+        .accordion-panel { padding: 0 10px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out, padding 0.3s ease-out; border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); border-radius: 0 0 4px 4px; margin-top: -6px; margin-bottom: 10px; background-color: #fff; }
+        .accordion-panel button { margin: 4px 2px; }
+        .accordion-header.active + .accordion-panel { max-height: 800px; padding: 10px; } /* Increased max-height */
+        .accordion-indicator { font-family: monospace; }
+        #selector-list-container { border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; margin-bottom: 15px; background: #fdfdff; }
+        #selector-list-container h3 { font-size: 0.9em; margin: 0 0 8px; color: var(--secondary-color); }
+        #selector-list { display: flex; flex-wrap: wrap; gap: 5px; min-height: 20px; }
+        #selector-list button { font-size: 12px; background-color: var(--secondary-color); }
+        #color-palette-container { border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; margin-top: 15px; background: #fdfdff; flex-shrink: 0; }
+        #color-palette-container h3 { font-size: 0.9em; margin: 0 0 8px; color: var(--secondary-color); }
+        #color-palette { display: flex; flex-wrap: wrap; gap: 8px; min-height: 28px; }
+        .color-chip { width: 24px; height: 24px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.2); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+        .color-chip:hover { transform: scale(1.1); }
+        .color-chip.active { box-shadow: 0 0 8px 3px var(--primary-color); transform: scale(1.1); }
+        #css-helper { padding: 15px; background-color: #f0f2f5; border: 1px solid var(--border-color); border-radius: 5px; margin-top: 10px; display: none; flex-shrink: 0; }
+        #css-helper-content { display:flex; flex-direction: column; gap: 10px; }
+        #css-helper-content .prop-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        #css-helper-content .prop-group label { font-weight: bold; font-size: 1em; min-width: 120px; }
+        #css-helper-content input, #css-helper-content select { padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; }
+        #css-helper-content input[type="number"] { width: 70px; }
+        #css-helper-content input[type="text"] { flex-grow: 1; }
+        #css-helper .four-values-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px 10px; align-items: center; }
+        #css-helper .four-values-grid label { min-width: auto; text-align: right; font-size: 0.9em; color: #555; }
+        #font-chips { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 5px; }
+        .font-chip-btn { background-color: var(--secondary-color); font-size: 11px; padding: 4px 8px; }
+        .font-chip-btn.active { background-color: var(--primary-color); font-weight: bold; }
+        #css-helper-content button { background-color: var(--success-color); color: white; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; align-self: flex-end; margin-top: 5px; }
+        .export-controls { border-top: 2px solid var(--border-color); margin-top: 20px; padding-top: 15px; flex-shrink: 0; }
+        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); color: white; display: none; align-items: center; justify-content: center; font-size: 2em; z-index: 1000; }
+        
+        /* AI Controls Styling */
+        .ai-control-group { margin-bottom: 15px; }
+        .ai-control-group label { display: block; font-weight: bold; font-size: 0.9em; color: var(--secondary-color); margin-bottom: 5px; }
+        .ai-control-group p.description { font-size: 0.85em; color: var(--secondary-color); margin: -2px 0 8px 0; }
+        #ai-system-prompt { width: 100%; box-sizing: border-box; min-height: 80px; font-family: monospace; resize: vertical; margin-bottom: 5px;}
+        #reset-system-prompt-btn { font-size: 12px; padding: 4px 8px; background-color: var(--secondary-color); }
+        #ai-prompt-input { width: 100%; box-sizing: border-box; min-height: 60px; margin-bottom: 10px; font-family: monospace; }
+        .ai-actions { display: flex; justify-content: space-between; gap: 5px; }
+        .ai-actions button { flex-grow: 1; }
+        
+        /* File Explorer Styling */
+        #file-explorer-container {
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 15px;
+            background: #fdfdff;
+        }
+        #file-explorer-container h3 {
+            font-size: 0.9em;
+            margin: 0 0 8px;
+            color: var(--secondary-color);
+        }
+        #file-explorer {
+            max-height: 250px;
+            overflow-y: auto;
+        }
+        .explorer-placeholder {
+            font-size: 12px;
+            margin: 0;
+            color: #888;
+        }
+        .file-explorer-item {
+            padding: 4px 8px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .file-explorer-item:hover {
+            background-color: #e9ecef;
+        }
+        .file-explorer-item.active {
+            background-color: var(--primary-color);
+            color: white;
+            font-weight: bold;
+        }
+        .file-explorer-item .icon {
+            margin-right: 6px;
+        }
+    </style>
+</head>
+<body>
+<div id="loading-overlay">AIが処理中です...</div>
+<div class="container">
+    <div class="editor-pane">
+        <div class="input-group">
+            <label for="folder-input">プロジェクト:</label>
+            <button id="load-folder-btn" title="フォルダを読み込んでプロジェクトを開始します">フォルダを読み込む</button>
+            <input type="file" id="folder-input" webkitdirectory directory multiple style="display: none;" />
+        </div>
+        <div id="file-explorer-container">
+            <h3>ファイルエクスプローラー</h3>
+            <div id="file-explorer">
+                <p class="explorer-placeholder">「フォルダを読み込む」ボタンからプロジェクトフォルダを選択してください。</p>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label for="api-key-input" title="Google AI Studioで取得したAPIキーを入力">Gemini API Key:</label>
+            <input type="password" id="api-key-input" placeholder="APIキーを入力...">
+            <button onclick="saveApiKey()">保存</button>
+        </div>
+        
+        <h2>HTML</h2>
+        
+        <div class="input-group">
+            <label for="page-title" title="エクスポートされるHTMLの<title>タグに使われます">ページタイトル:</label>
+            <input type="text" id="page-title" placeholder="ページのタイトルを入力">
+        </div>
+        <div class="input-group">
+            <label for="attribute-input" title="ここに入力してclass/idボタンを押します">属性名:</label>
+            <input type="text" id="attribute-input" placeholder="class名 / id名を入力">
+            <button id="insert-class-btn" onclick="insertAttribute('class')" title="カーソル位置のタグにclass属性を挿入">class</button>
+            <button id="insert-id-btn" onclick="insertAttribute('id')" title="カーソル位置のタグにid属性を挿入">id</button>
+        </div>
+
+        <div class="undo-redo-controls">
+            <button id="undo-btn" onclick="handleUndo()" title="元に戻す (Ctrl+Z)">↶ 元に戻す</button>
+            <button id="redo-btn" onclick="handleRedo()" title="やり直す (Ctrl+Y)">↷ やり直す</button>
+            <button id="save-btn" title="現在のファイルを別名（元ファイル名_）でダウンロードします (Ctrl+S)" disabled>💾 別名で保存</button>
+        </div>
+
+        <div class="controls accordion">
+            <button id="end-tag-toggle" title="終了タグモードのON/OFF (Shiftキーでも可)">/</button>
+            
+            <button class="accordion-header" title="AIアシスタント機能">🤖 AIアシスタント<span class="accordion-indicator">[+]</span></button>
+            <div class="accordion-panel">
+                <div class="ai-control-group">
+                    <label for="ai-system-prompt">カスタムシステムプロンプト:</label>
+                    <p class="description">AIの役割や応答スタイルを定義する前提条件です。設定はブラウザに保存されます。</p>
+                    <textarea id="ai-system-prompt"></textarea>
+                    <button id="reset-system-prompt-btn">デフォルトにリセット</button>
+                </div>
+                <div class="ai-control-group">
+                    <label for="ai-prompt-input">具体的な指示:</label>
+                    <textarea id="ai-prompt-input" placeholder="例: このCSSをダークモードのデザインにしてください"></textarea>
+                    <div class="ai-actions">
+                        <button onclick="handleAiRequest('replaceSelection')" title="選択したコードをAIの生成結果で置き換えます">選択範囲と置換</button>
+                        <button onclick="handleAiRequest('insertAtCursor')" title="カーソル位置にAIの生成結果を挿入します">カーソル位置に挿入</button>
+                        <button onclick="handleAiRequest('replaceAll')" title="現在アクティブなエディタ全体をAIの生成結果で書き換えます">全体を書き換え</button>
+                    </div>
+                </div>
+                <hr style="margin: 15px 0;">
+                <button onclick="aiFormatHtml()" style="width: 48%; margin: 1%;">HTMLを整形</button>
+                <button onclick="aiFormatCss()" style="width: 48%; margin: 1%;">CSSを整形</button>
+            </div>
+
+            <button class="accordion-header" title="クリックしてセマンティック要素のタグを開閉します">構造（セマンティック）<span class="accordion-indicator">[+]</span></button>
+            <div class="accordion-panel">
+                <button data-tag="header" onclick="insertTag(this.dataset.tag)">header</button>
+                <button data-tag="nav" onclick="insertTag(this.dataset.tag)">nav</button>
+                <button data-tag="main" onclick="insertTag(this.dataset.tag)">main</button>
+                <button data-tag="section" onclick="insertTag(this.dataset.tag)">section</button>
+                <button data-tag="article" onclick="insertTag(this.dataset.tag)">article</button>
+                <button data-tag="aside" onclick="insertTag(this.dataset.tag)">aside</button>
+                <button data-tag="footer" onclick="insertTag(this.dataset.tag)">footer</button>
+            </div>
+            
+            <button class="accordion-header" title="クリックして見出しや段落などのタグを開閉します">基本ブロック<span class="accordion-indicator">[+]</span></button>
+            <div class="accordion-panel">
+                <div class="dropdown" style="margin: 4px 2px;">
+                    <button id="heading-btn" data-tag="h1" data-desc="見出し" onclick="insertTag(this.dataset.tag)">&lt;h1&gt;</button>
+                    <button class="dropdown-toggle" title="見出しレベル(h1-h6)を選択します" onclick="toggleDropdown(event)">▼</button>
+                    <div id="heading-dropdown" class="dropdown-content"><a href="#" data-level="h1"><h1>見出し 1</h1></a><a href="#" data-level="h2"><h2>見出し 2</h2></a><a href="#" data-level="h3"><h3>見出し 3</h3></a><a href="#" data-level="h4"><h4>見出し 4</h4></a><a href="#" data-level="h5"><h5>見出し 5</h5></a><a href="#" data-level="h6"><h6>見出し 6</h6></a></div>
+                </div>
+                <button data-tag="p" onclick="insertTag(this.dataset.tag)">&lt;p&gt;</button>
+                <button data-tag="div" onclick="insertTag(this.dataset.tag)">&lt;div&gt;</button>
+                <button data-tag="blockquote" onclick="insertTag(this.dataset.tag)">blockquote</button>
+                <button data-tag="hr" onclick="insertTag(this.dataset.tag)" data-selfclosing="true">hr</button>
+            </div>
+
+            <button class="accordion-header" title="クリックしてインライン要素のタグを開閉します">インライン &amp; リンク<span class="accordion-indicator">[+]</span></button>
+            <div class="accordion-panel">
+                <button data-tag="span" onclick="insertTag(this.dataset.tag)">span</button>
+                <button data-tag="a" onclick="insertTag(this.dataset.tag)">a</button>
+                <button data-tag="strong" onclick="insertTag(this.dataset.tag)">strong</button>
+                <button data-tag="em" onclick="insertTag(this.dataset.tag)">em</button>
+                <button data-tag="br" onclick="insertTag(this.dataset.tag)" data-selfclosing="true">br</button>
+            </div>
+
+            <button class="accordion-header" title="クリックしてリスト関連のテンプレートを開閉します">リスト<span class="accordion-indicator">[+]</span></button>
+            <div class="accordion-panel">
+                <button onclick="insertHtmlTemplate('ul')">ul リスト</button>
+                <button onclick="insertHtmlTemplate('ol')">ol リスト</button>
+                <button onclick="insertHtmlTemplate('dl')">dl リスト</button>
+                <button data-tag="li" onclick="insertTag(this.dataset.tag)">li</button>
+            </div>
+
+            <button class="accordion-header" title="クリックしてテーブル関連のテンプレートを開閉します">テーブル<span class="accordion-indicator">[+]</span></button>
+            <div class="accordion-panel">
+                <button onclick="generateTable()">テーブル生成</button>
+                <button data-tag="tr" onclick="insertTag(this.dataset.tag)">tr</button>
+                <button data-tag="th" onclick="insertTag(this.dataset.tag)">th</button>
+                <button data-tag="td" onclick="insertTag(this.dataset.tag)">td</button>
+            </div>
+            
+            <button class="accordion-header" title="クリックしてフォーム関連のタグを開閉します">フォーム<span class="accordion-indicator">[+]</span></button>
+            <div class="accordion-panel">
+                <button data-tag="form" onclick="insertTag(this.dataset.tag)">form</button>
+                <button data-tag="label" onclick="insertTag(this.dataset.tag)">label</button>
+                <button data-tag="input" onclick="insertTag(this.dataset.tag)" data-selfclosing="true">input</button>
+                <button data-tag="textarea" onclick="insertTag(this.dataset.tag)">textarea</button>
+                <button onclick="insertHtmlTemplate('select')">select</button>
+                <button data-tag="button" onclick="insertTag(this.dataset.tag)">button</button>
+            </div>
+        </div>
+
+        <div id="html-editor-wrapper" class="editor-wrapper"><pre id="html-highlighter" class="editor-highlighter"></pre><textarea id="html-editor" class="editor-textarea" oninput="handleHtmlInput()" spellcheck="false" disabled></textarea></div>
+        
+        <h2>CSS</h2>
+        <div id="selector-list-container"><h3>HTML内のセレクタ一覧</h3><div id="selector-list"><p style="font-size:12px; margin:0; color:#888;">HTMLにclassやidを記述すると、ここにボタンが自動で表示されます。</p></div></div>
+        <div class="controls">
+            <div class="accordion">
+                <button class="accordion-header" title="クリックしてテキスト・フォント関連のプロパティを開閉します">テキスト &amp; フォント <span class="accordion-indicator">[+]</span></button>
+                <div class="accordion-panel">
+                    <button onclick="openCssHelper('color')" title="文字色">color</button>
+                    <button onclick="openCssHelper('font')" title="フォント一括指定">font</button>
+                    <button onclick="openCssHelper('font-family')" title="フォントの種類">font-family</button>
+                    <button onclick="openCssHelper('font-size')" title="文字の大きさ">font-size</button>
+                    <button onclick="openCssHelper('font-weight')" title="文字の太さ">font-weight</button>
+                    <button onclick="openCssHelper('font-style')" title="文字のスタイル(斜体など)">font-style</button>
+                    <button onclick="openCssHelper('text-align')" title="水平方向の配置">text-align</button>
+                    <button onclick="openCssHelper('line-height')" title="行の高さ">line-height</button>
+                    <button onclick="openCssHelper('letter-spacing')" title="文字の間隔">letter-spacing</button>
+                    <button onclick="openCssHelper('text-decoration')" title="テキストの装飾">text-decoration</button>
+                    <button onclick="openCssHelper('text-shadow')" title="文字の影">text-shadow</button>
+                    <button onclick="openCssHelper('white-space')" title="改行や空白の扱い">white-space</button>
+                    <button onclick="openCssHelper('text-emphasis')" title="文字の傍点">text-emphasis</button>
+                    <button onclick="openCssHelper('writing-mode')" title="書字方向（縦書きなど）">writing-mode</button>
+                    <button onclick="openCssHelper('line-clamp')" title="複数行テキストの省略">line-clamp</button>
+                    <button onclick="openCssHelper('hyphens')" title="単語のハイフネーション">hyphens</button>
+                    <button onclick="openCssHelper('text-decoration-skip-ink')" title="下線のインクスキップ">text-decoration-skip-ink</button>
+                    <button onclick="openCssHelper('ruby-align')" title="ルビテキストの配置">ruby-align</button>
+                    <button onclick="openCssHelper('font-size-adjust')" title="フォントの可読性調整">font-size-adjust</button>
+                    <button onclick="openCssHelper('text-wrap')" title="テキストの折り返し方法">text-wrap</button>
+                    <button onclick="openCssHelper('content')" title="擬似要素の内容">content</button>
+                </div>
+                <button class="accordion-header" title="クリックしてボックスモデル関連のプロパティを開閉します">ボックスモデル <span class="accordion-indicator">[+]</span></button>
+                <div class="accordion-panel">
+                    <h4 class="prop-group-heading">寸法</h4>
+                    <button onclick="openCssHelper('width')" title="要素の幅">width</button>
+                    <button onclick="openCssHelper('height')" title="要素の高さ">height</button>
+                    <button onclick="openCssHelper('min-width')" title="要素の最小幅">min-width</button>
+                    <button onclick="openCssHelper('max-width')" title="要素の最大幅">max-width</button>
+                    <button onclick="openCssHelper('min-height')" title="要素の最小高さ">min-height</button>
+                    <button onclick="openCssHelper('max-height')" title="要素の最大高さ">max-height</button>
+                    <h4 class="prop-group-heading">余白（外側 &amp; 内側）</h4>
+                    <button onclick="openCssHelper('margin')" title="外側の余白（全辺・各辺）">margin</button>
+                    <button onclick="openCssHelper('padding')" title="内側の余白（全辺・各辺）">padding</button>
+                    <h4 class="prop-group-heading">境界線</h4>
+                    <button onclick="openCssHelper('border')" title="境界線の一括指定（全辺・各辺）">border</button>
+                    <button onclick="openCssHelper('border-width')" title="境界線の太さ（全辺・各辺）">border-width</button>
+                    <button onclick="openCssHelper('border-style')" title="境界線の種類（全辺・各辺）">border-style</button>
+                    <button onclick="openCssHelper('border-color')" title="境界線の色（全辺・各辺）">border-color</button>
+                    <button onclick="openCssHelper('border-radius')" title="角の丸み">border-radius</button>
+                    <h4 class="prop-group-heading">その他</h4>
+                    <button onclick="openCssHelper('box-shadow')" title="要素の影">box-shadow</button>
+                    <button onclick="openCssHelper('box-sizing')" title="ボックスサイズの算出方法">box-sizing</button>
+                </div>
+                <button class="accordion-header" title="クリックしてレイアウト・Flexbox関連のプロパティを開閉します">レイアウト &amp; Flexbox <span class="accordion-indicator">[+]</span></button>
+                <div class="accordion-panel">
+                    <button onclick="openCssHelper('display')" title="表示形式">display</button>
+                    <button onclick="openCssHelper('position')" title="配置方法">position</button>
+                    <button onclick="openCssHelper('top')" title="上からの位置">top</button>
+                    <button onclick="openCssHelper('right')" title="右からの位置">right</button>
+                    <button onclick="openCssHelper('bottom')" title="下からの位置">bottom</button>
+                    <button onclick="openCssHelper('left')" title="左からの位置">left</button>
+                    <button onclick="openCssHelper('z-index')" title="重なりの順序">z-index</button>
+                    <button onclick="openCssHelper('animation-timeline')" title="アニメーションのタイムライン">animation-timeline</button>
+                    <button onclick="openCssHelper('float')" title="回り込み">float</button>
+                    <button onclick="openCssHelper('clear')" title="回り込みの解除">clear</button>
+                    <button onclick="openCssHelper('flex-direction')" title="(Flexbox) 主軸の方向">flex-direction</button>
+                    <button onclick="openCssHelper('justify-content')" title="(Flexbox) 主軸方向の配置">justify-content</button>
+                    <button onclick="openCssHelper('align-items')" title="(Flexbox) 交差軸方向の配置">align-items</button>
+                    <button onclick="openCssHelper('flex-wrap')" title="(Flexbox) 折り返し">flex-wrap</button>
+                    <button onclick="openCssHelper('gap')" title="(Flex/Grid) 要素間の隙間">gap</button>
+                    <button onclick="openCssHelper('scroll-snap-type')" title="スクロールのスナップ方法">scroll-snap-type</button>
+                    <button onclick="openCssHelper('scroll-snap-align')" title="スナップする位置">scroll-snap-align</button>
+                    <button onclick="openCssHelper('container-type')" title="(Container Query) コンテナのタイプ">container-type</button>
+                    <button onclick="openCssHelper('container-name')" title="(Container Query) コンテナの名前">container-name</button>
+                    <button onclick="openCssHelper('scrollbar-gutter')" title="スクロールバーの溝の確保">scrollbar-gutter</button>
+                    <button onclick="openCssHelper('grid-auto-flow')" title="(Grid) 自動配置の方向">grid-auto-flow</button>
+                </div>
+                <button class="accordion-header" title="クリックして3Dや変形関連のプロパティを開閉します">3D &amp; トランスフォーム <span class="accordion-indicator">[+]</span></button>
+                <div class="accordion-panel">
+                    <button onclick="openCssHelper('perspective')" title="3D効果の視点距離">perspective</button>
+                    <button onclick="openCssHelper('transform')" title="回転、拡大縮小、傾斜、移動">transform</button>
+                    <button onclick="openCssHelper('transform-style')" title="子の3D空間の維持">transform-style</button>
+                    <button onclick="openCssHelper('transform-origin')" title="変形の基点">transform-origin</button>
+                    <button onclick="openCssHelper('backface-visibility')" title="裏面の表示設定">backface-visibility</button>
+                </div>
+                <button class="accordion-header" title="クリックして背景やその他のプロパティを開閉します">背景 &amp; その他 <span class="accordion-indicator">[+]</span></button>
+                <div class="accordion-panel">
+                    <button onclick="openCssHelper('background')" title="背景の一括指定">background</button>
+                    <button onclick="openCssHelper('background-color')" title="背景色">background-color</button>
+                    <button onclick="openCssHelper('background-image')" title="背景画像">background-image</button>
+                    <button onclick="openCssHelper('opacity')" title="透明度">opacity</button>
+                    <button onclick="openCssHelper('cursor')" title="カーソルの形状">cursor</button>
+                    <button onclick="openCssHelper('list-style')" title="リストのマーカー">list-style</button>
+                    <button onclick="openCssHelper('transition')" title="変化のアニメーション">transition</button>
+                    <button onclick="openCssHelper('content-visibility')" title="レンダリングの可視性">content-visibility</button>
+                    <button onclick="openCssHelper('will-change')" title="変更の事前通知">will-change</button>
+                    <button onclick="openCssHelper('mask-image')" title="要素のマスク">mask-image</button>
+                    <button onclick="openCssHelper('backdrop-filter')" title="背面のフィルタ効果">backdrop-filter</button>
+                    <button onclick="openCssHelper('clip-path')" title="要素のクリッピング">clip-path</button>
+                    <button onclick="openCssHelper('scroll-behavior')" title="ページ内スクロールの挙動">scroll-behavior</button>
+                </div>
+            </div>
+        </div>
+        <div id="css-editor-wrapper" class="editor-wrapper"><pre id="css-highlighter" class="editor-highlighter"></pre><textarea id="css-editor" class="editor-textarea" oninput="handleCssInput()" onclick="handleCssEditorClick(event)" spellcheck="false" disabled></textarea></div>
+        
+        <div id="color-palette-container"><h3>カラーパレット</h3><div id="color-palette"></div></div>
+        <div id="css-helper"><div id="css-helper-content"></div></div>
+        <div class="export-controls">
+            <button id="export-html" title="HTMLコードを完全なHTMLファイルとしてダウンロードします">HTMLをエクスポート</button><button id="export-css" title="CSSコードのみをファイルとしてダウンロードします">CSSをエクスポート</button><button id="export-combined" title="HTMLとCSSを結合した単一のファイルをダウンロードします">結合してエクスポート</button>
+        </div>
+    </div>
+    <div class="preview-pane-wrapper">
+        <button id="open-preview-btn" title="プレビューを新しいタブで開く">&#x2197;</button>
+        <iframe id="design-preview"></iframe>
+    </div>
+</div>
+
+<script>
+    // --- ELEMENT GRAB ---
+    const htmlEditor = document.getElementById("html-editor"), htmlHighlighter = document.getElementById("html-highlighter");
+    const cssEditor = document.getElementById("css-editor"), cssHighlighter = document.getElementById("css-highlighter");
+    const designPreview = document.getElementById("design-preview"), endTagToggleBtn = document.getElementById("end-tag-toggle");
+    const htmlTagButtons = document.querySelectorAll("[data-tag]"), cssHelper = document.getElementById("css-helper");
+    const dropdownContent = document.getElementById("heading-dropdown"), pageTitleInput = document.getElementById("page-title");
+    const attributeInput = document.getElementById("attribute-input"), selectorList = document.getElementById("selector-list");
+    const colorPalette = document.getElementById("color-palette");
+    const openPreviewBtn = document.getElementById("open-preview-btn");
+    const apiKeyInput = document.getElementById("api-key-input");
+    const loadingOverlay = document.getElementById("loading-overlay");
+    const aiPromptInput = document.getElementById("ai-prompt-input");
+    const undoBtn = document.getElementById('undo-btn');
+    const redoBtn = document.getElementById('redo-btn');
+    const aiSystemPrompt = document.getElementById("ai-system-prompt");
+    const resetSystemPromptBtn = document.getElementById("reset-system-prompt-btn");
+    const folderInput = document.getElementById("folder-input");
+    const loadFolderBtn = document.getElementById("load-folder-btn");
+    const fileExplorer = document.getElementById("file-explorer");
+    const saveBtn = document.getElementById('save-btn');
+
+    // --- STATE & DEFINITIONS ---
+    let isEndTagMode = false, currentEditInfo = null, activeHighlightColor = null;
+    let GEMINI_API_KEY = null;
+    const DEFAULT_SYSTEM_PROMPT = `あなたは専門家のWeb開発AIアシスタントです。
+ユーザーの指示に基づき、HTMLコードとCSSコードを生成してください。
+
+あなたの回答は、必ず以下の形式に従う必要があります。
+解説や余計なテキストは一切含めず、指定された区切り文字で囲まれたコードブロックのみを出力してください。
+
+[HTML_START]
+ここにHTMLコードを記述
+[HTML_END]
+
+[CSS_START]
+ここにCSSコードを記述
+[CSS_END]`;
+    const editorStates = { html: { undoStack: [], redoStack: [] }, css: { undoStack: [], redoStack: [] } };
+    const MAX_HISTORY = 50;
+    let htmlTypingTimer, cssTypingTimer;
+    const TYPING_DEBOUNCE_DELAY = 1500;
+    let lastFocusedEditorType = 'html';
+    let projectFiles = {};
+    let activeFilePath = null;
+    let previewTargetHtmlPath = null; // プレビュー対象のHTMLを記憶する変数
+
+    const cssProperties = {
+        color: { type: "color" },
+        "font-family": { type: "font-stack-builder", default: '"Noto Sans JP", sans-serif', fonts: ["Noto Sans JP", "Noto Serif JP", "Kiwi Maru", "游ゴシック", "ヒラギノ角ゴシック", "メイリオ", "Helvetica", "Roboto"], fallbacks: ["sans-serif", "serif", "monospace", "cursive", "fantasy"] },
+        "font-size": { type: "unit", units: ["px", "%", "em", "rem", "vw"], default: "16" },
+        "font-weight": { type: "select", values: [{value: "normal", desc: "標準の太さ (400)"}, {value: "bold", desc: "太字 (700)"}, {value: "lighter", desc: "親要素より一段階細く"}, {value: "bolder", desc: "親要素より一段階太く"}, {value: "100", desc: "極細"}, {value: "200", desc: ""}, {value: "300", desc: "細め"}, {value: "400", desc: "標準"}, {value: "500", desc: ""}, {value: "600", desc: "少し太め"}, {value: "700", desc: "太字"}, {value: "800", desc: ""}, {value: "900", desc: "極太"}] },
+        "font-style": { type: "select", values: [{value: "normal", desc: "標準のスタイル"}, {value: "italic", desc: "イタリック体"}, {value: "oblique", desc: "斜体（オブリーク）"}] },
+        "text-align": { type: "select", values: [{value: "left", desc: "左揃え"}, {value: "center", desc: "中央揃え"}, {value: "right", desc: "右揃え"}, {value: "justify", desc: "両端揃え"}] },
+        "line-height": { type: "unit", units: ["", "px", "em", "%"], default: "1.6", isDecimal: true },
+        "letter-spacing": { type: "unit", units: ["px", "em", "rem"], default: "0", isDecimal: true },
+        "text-decoration": { type: "select", values: [{value:"none", desc:"装飾なし"}, {value:"underline", desc:"下線"}, {value:"overline", desc:"上線"}, {value:"line-through", desc:"取り消し線"}] },
+        "text-shadow": { type: "text", default: "2px 2px 4px #888" },
+        "white-space": {type: "select", values: [{value:"normal", desc:"通常通り。テキストは折り返される"}, {value:"nowrap", desc:"折り返さず、一行で表示"}, {value:"pre", desc:"<pre>タグのように、空白や改行をそのまま表示"}, {value:"pre-wrap", desc:"preと同様だが、テキストは折り返される"}, {value:"pre-line", desc:"連続する空白は一つにまとめられるが、改行は維持される"}] },
+        "text-emphasis": { type: "builder-text-emphasis", styles: ["filled", "open", "dot", "circle", "double-circle", "triangle", "sesame"] },
+        "writing-mode": { type: "select", values: [{value: "horizontal-tb", desc: "水平方向、上から下へ（デフォルト）"}, {value: "vertical-rl", desc: "垂直方向、右から左へ"}, {value: "vertical-lr", desc: "垂直方向、左から右へ"}] },
+        "line-clamp": { type: "builder-line-clamp" },
+        "hyphens": { type: "select", values: [{value: "none", desc: "ハイフネーションを行わない"}, {value: "manual", desc: "必要に応じて手動でハイフンを挿入"}, {value: "auto", desc: "ブラウザが自動的にハイフネーションを行う"}] },
+        "text-decoration-skip-ink": { type: "select", values: [{value: "auto", desc: "ブラウザのデフォルト（通常はスキップする）"}, {value: "none", desc: "インクをスキップしない（線が文字に重なる）"}, {value: "all", desc: "日本語の漢字などにも適用"}] },
+        "ruby-align": { type: "select", values: [{value: "space-around", desc: "ルビ文字を均等に配置"}, {value: "space-between", desc: "最初と最後のルビ文字を両端に配置"}, {value: "center", desc: "中央に寄せる"}, {value: "start", desc: "先頭に寄せる"}] },
+        "font-size-adjust": { type: "unit", units: [""], default: "0.5", isDecimal: true },
+        "text-wrap": { type: "select", values: [{value: "wrap", desc: "通常通り折り返す"}, {value: "nowrap", desc: "折り返さない"}, {value: "balance", desc: "テキスト行の長さを均等にする"}] },
+        "content": { type: "builder-content", types: ["string", "attr", "url", "none"], default: "''" },
+        font: { type: "shorthand-font" },
+        width: { type: "unit", units: ["px", "%", "vw", "auto"], default: "100" },
+        height: { type: "unit", units: ["px", "%", "vh", "auto"], default: "auto" },
+        "min-width": { type: "unit", units: ["px", "%", "vw"], default: "0" },
+        "max-width": { type: "unit", units: ["px", "%", "vw", "none"], default: "none" },
+        "min-height": { type: "unit", units: ["px", "%", "vh"], default: "0" },
+        "max-height": { type: "unit", units: ["px", "%", "vh", "none"], default: "none" },
+        margin: { type: "shorthand-boxmodel", default: "10px" },
+        padding: { type: "shorthand-boxmodel", default: "10px" },
+        border: { type: "shorthand-border-master" },
+        "border-width": { type: "border-individual", input: "width" },
+        "border-style": { type: "border-individual", input: "style" },
+        "border-color": { type: "border-individual", input: "color" },
+        "border-radius": { type: "unit", units: ["px", "%"], default: "8" },
+        "box-shadow": { type: "text", default: "2px 2px 5px rgba(0,0,0,0.2)" },
+        "box-sizing": { type: "select", values: [{value: "content-box", desc: "widthとheightはコンテンツ領域のみを指す（デフォルト）"}, {value: "border-box", desc: "widthとheightにpaddingとborderが含まれる"}] },
+        display: { type: "select", values: [{value: "block", desc: "ブロック要素。前後に改行が入り、幅と高さを指定できる"}, {value: "inline", desc: "インライン要素。前後に改行が入らず、幅と高さは指定できない"}, {value: "inline-block", desc: "インラインとブロックの両方の特性を持つ"}, {value: "flex", desc: "フレックスボックスのコンテナを生成する"}, {value: "grid", desc: "グリッドレイアウトのコンテナを生成する"}, {value: "none", desc: "要素を非表示にする"}] },
+        position: { type: "select", values: [{value: "static", desc: "通常の位置（デフォルト）"}, {value: "relative", desc: "通常の位置を基準に相対的に配置"}, {value: "absolute", desc: "親要素を基準に絶対的に配置"}, {value: "fixed", desc: "ブラウザウィンドウを基準に固定配置"}, {value: "sticky", desc: "スクロールに応じて途中から固定配置になる"}] },
+        top: { type: "unit", units: ["px", "%", "vh"], default: "0" }, right: { type: "unit", units: ["px", "%", "vw"], default: "0" },
+        bottom: { type: "unit", units: ["px", "%", "vh"], default: "0" }, left: { type: "unit", units: ["px", "%", "vw"], default: "0" },
+        "z-index": { type: "text", default: "1" },
+        "animation-timeline": { type: "builder-animation-timeline", sources: ["auto", "scroll()", "view()"] },
+        float: { type: "select", values: [{value: "left", desc: "左に回り込み"}, {value: "right", desc: "右に回り込み"}, {value: "none", desc: "回り込みをしない"}] },
+        clear: { type: "select", values: [{value: "left", desc: "左の回り込みを解除"}, {value: "right", desc: "右の回り込みを解除"}, {value: "both", desc: "両方の回り込みを解除"}] },
+        "flex-direction": { type: "select", values: [{value: "row", desc: "横方向（左から右）に配置"}, {value: "row-reverse", desc: "横方向（右から左）に配置"}, {value: "column", desc: "縦方向（上から下）に配置"}, {value: "column-reverse", desc: "縦方向（下から上）に配置"}] },
+        "justify-content": { type: "select", values: [{value: "flex-start", desc: "主軸の開始位置に寄せて配置"}, {value: "flex-end", desc: "主軸の終了位置に寄せて配置"}, {value: "center", desc: "主軸の中央に配置"}, {value: "space-between", desc: "最初と最後の要素を両端に寄せ、残りを均等に配置"}, {value: "space-around", desc: "各要素の周りに均等なスペースを配置"}, {value: "space-evenly", desc: "各要素間および両端に均等なスペースを配置"}] },
+        "align-items": { type: "select", values: [{value: "stretch", desc: "親の高さに合わせて引き伸ばす"}, {value: "flex-start", desc: "交差軸の開始位置に寄せて配置"}, {value: "flex-end", desc: "交差軸の終了位置に寄せて配置"}, {value: "center", desc: "交差軸の中央に配置"}, {value: "baseline", desc: "テキストのベースラインを揃える"}] },
+        "flex-wrap": { type: "select", values: [{value: "nowrap", desc: "折り返さない"}, {value: "wrap", desc: "折り返す"}, {value: "wrap-reverse", desc: "逆方向に折り返す"}] },
+        gap: { type: "unit", units: ["px", "rem", "em", "%"], default: "10" },
+        "scroll-snap-type": { type: "builder-scroll-snap", axes: ["y", "x", "block", "inline"], strictness: ["mandatory", "proximity"] },
+        "scroll-snap-align": { type: "select", values: [{value: "none", desc: "スナップしない"}, {value: "start", desc: "スナップ領域の開始位置に合わせる"}, {value: "end", desc: "スナップ領域の終了位置に合わせる"}, {value: "center", desc: "スナップ領域の中央に合わせる"}] },
+        "container-type": { type: "select", values: [{value: "size", desc: "ブロック軸とインライン軸のサイズでコンテナクエリを評価"}, {value: "inline-size", desc: "インライン軸のサイズのみで評価"}, {value: "normal", desc: "コンテナとして機能しない"}] },
+        "container-name": { type: "text", default: "sidebar" },
+        "scrollbar-gutter": { type: "builder-scrollbar-gutter", bases: ["auto", "stable"] },
+        "grid-auto-flow": { type: "builder-grid-auto-flow", directions: ["row", "column"] },
+        perspective: { type: "unit", units: ["px", "em"], default: "1000" },
+        transform: { type: "text", default: "rotateY(45deg)"},
+        "transform-style": { type: "select", values: [{value: "flat", desc: "子は2D平面に配置（デフォルト）"}, {value: "preserve-3d", desc: "子は3D空間に配置"}] },
+        "transform-origin": { type: "text", default: "center" },
+        "backface-visibility": { type: "select", values: [{value: "visible", desc: "裏面を可視（デフォルト）"}, {value: "hidden", desc: "裏面を不可視"}] },
+        background: { type: "shorthand-background" }, "background-color": { type: "color" },
+        "background-image": { type: "text", default: "linear-gradient(to right, #ff7e5f, #feb47b)" },
+        opacity: { type: "unit", units: [""], default: "1", isDecimal: true, min: 0, max: 1 },
+        cursor: { type: "select", values: [{value:"auto", desc:"自動"}, {value:"default", desc:"デフォルトカーソル"}, {value:"pointer", desc:"ポインター（リンクなど）"}, {value:"wait", desc:"待機中"}, {value:"text", desc:"テキスト選択"}, {value:"move", desc:"移動"}, {value:"not-allowed", desc:"許可されていない"}] },
+        "list-style": { type: "select", values: [{value: "disc", desc: "黒丸"}, {value: "circle", desc: "白丸"}, {value: "square", desc: "四角"}, {value: "decimal", desc: "数字"}, {value: "none", desc: "マーカーなし"}] },
+        transition: { type: "text", default: "all 0.3s ease" },
+        "content-visibility": { type: "select", values: [{value: "visible", desc: "通常通り表示（デフォルト）"}, {value: "auto", desc: "要素が画面外にある場合、レンダリングをスキップ"}, {value: "hidden", desc: "要素を非表示にし、レンダリングをスキップ"}] },
+        "will-change": { type: "builder-will-change", values: ["transform", "opacity", "top", "left", "right", "bottom", "scroll-position", "contents"] },
+        "mask-image": { type: "builder-mask-image", sources: ["linear-gradient", "radial-gradient", "url"] },
+        "backdrop-filter": { type: "builder-backdrop-filter", filters: ["blur", "brightness", "contrast", "grayscale", "hue-rotate", "invert", "opacity", "saturate", "sepia"] },
+        "clip-path": { type: "builder-clip-path", shapes: ["inset", "circle", "ellipse", "polygon"] },
+        "scroll-behavior": { type: "select", values: [{value: "auto", desc: "瞬時にスクロール"}, {value: "smooth", desc: "スムーズにスクロール"}] },
+    };
+    const validCssColors = new Set(["aliceblue","antiquewhite","aqua","aquamarine","azure","beige","bisque","black","blanchedalmond","blue","blueviolet","brown","burlywood","cadetblue","chartreuse","chocolate","coral","cornflowerblue","cornsilk","crimson","cyan","darkblue","darkcyan","darkgoldenrod","darkgray","darkgreen","darkgrey","darkkhaki","darkmagenta","darkolivegreen","darkorange","darkorchid","darkred","darksalmon","darkseagreen","darkslateblue","darkslategray","darkslategrey","darkturquoise","darkviolet","deeppink","deepskyblue","dimgray","dimgrey","dodgerblue","firebrick","floralwhite","forestgreen","fuchsia","gainsboro","ghostwhite","gold","goldenrod","gray","green","greenyellow","grey","honeydew","hotpink","indianred","indigo","ivory","khaki","lavender","lavenderblush","lawngreen","lemonchiffon","lightblue","lightcoral","lightcyan","lightgoldenrodyellow","lightgray","lightgreen","lightgrey","lightpink","lightsalmon","lightseagreen","lightskyblue","lightslategray","lightslategrey","lightsteelblue","lightyellow","lime","limegreen","linen","magenta","maroon","mediumaquamarine","mediumblue","mediumorchid","mediumpurple","mediumseagreen","mediumslateblue","mediumspringgreen","mediumturquoise","mediumvioletred","midnightblue","mintcream","mistyrose","moccasin","navajowhite","navy","oldlace","olive","olivedrab","orange","orangered","orchid","palegoldenrod","palegreen","paleturquoise","palevioletred","papayawhip","peachpuff","peru","pink","plum","powderblue","purple","rebeccapurple","red","rosybrown","royalblue","saddlebrown","salmon","sandybrown","seagreen","seashell","sienna","silver","skyblue","slateblue","slategray","slategrey","snow","springgreen","steelblue","tan","teal","thistle","tomato","turquoise","violet","wheat","white","whitesmoke","yellow","yellowgreen"]);
+
+    // --- FOLDER/PROJECT FUNCTIONS ---
+    function handleFolderSelect(event) {
+        const files = event.target.files;
+        if (files.length === 0) return;
+
+        Object.values(projectFiles).forEach(fileData => {
+            if (fileData.objectURL) URL.revokeObjectURL(fileData.objectURL);
+        });
+
+        projectFiles = {};
+        saveBtn.disabled = true;
+        activeFilePath = null;
+        previewTargetHtmlPath = null;
+        fileExplorer.innerHTML = '<p class="explorer-placeholder">ファイルを読み込み中...</p>';
+        let processedFiles = 0;
+
+        const onFileProcessed = () => {
+            processedFiles++;
+            if (processedFiles === files.length) {
+                renderFileTree();
+                const firstHtml = Object.keys(projectFiles).find(p => projectFiles[p].type === 'html');
+                if (firstHtml) {
+                    openFileInEditor(firstHtml);
+                } else {
+                     updatePreview();
+                }
+            }
+        };
+
+        for (const file of files) {
+            const path = file.webkitRelativePath;
+            const extension = path.split('.').pop().toLowerCase();
+            let type = 'other';
+
+            if (['html', 'htm'].includes(extension)) type = 'html';
+            else if (extension === 'css') type = 'css';
+            else if (extension === 'js') type = 'javascript';
+            else if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(extension)) type = 'image';
+
+            const fileData = {
+                file: file,
+                type: type,
+                content: null,
+                objectURL: null,
+                originalHead: '',
+                originalBody: '',
+                bodyTag: '<body>'
+            };
+            projectFiles[path] = fileData;
+
+            // CSS, JS, Images are immediately converted to blob URLs for path-independent access
+            if (type === 'image' || type === 'css' || type === 'javascript') {
+                fileData.objectURL = URL.createObjectURL(file);
+            }
+
+            // Text-based files are read into memory
+            if (type === 'html' || type === 'css' || type === 'javascript') {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    fileData.content = e.target.result;
+                    if (type === 'html') {
+                        // For HTML, parse head and body for reconstruction
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(fileData.content, 'text/html');
+                        fileData.originalHead = doc.head.innerHTML;
+                        fileData.originalBody = doc.body.innerHTML;
+                        let bodyTagString = '<body';
+                        for (const attr of doc.body.attributes) {
+                             bodyTagString += ` ${attr.name}="${attr.value}"`;
+                        }
+                        bodyTagString += '>';
+                        fileData.bodyTag = bodyTagString;
+                    }
+                    onFileProcessed();
+                };
+                reader.onerror = () => {
+                    console.error(`Error reading text file: ${file.name}`);
+                    onFileProcessed();
+                };
+                reader.readAsText(file);
+            } else {
+                 // For other file types, just mark as processed
+                 onFileProcessed();
+            }
+        }
+    }
+
+    function renderFileTree() {
+        fileExplorer.innerHTML = '';
+        const paths = Object.keys(projectFiles).sort();
+        if (paths.length === 0) {
+            fileExplorer.innerHTML = '<p class="explorer-placeholder">表示できるファイルがありませんでした。</p>';
+            return;
+        }
+        paths.forEach(path => {
+            const fileData = projectFiles[path];
+            if (fileData.type === 'other') return;
+
+            const item = document.createElement('div');
+            item.className = 'file-explorer-item';
+            item.dataset.path = path;
+
+            let icon = '📄';
+            if (fileData.type === 'css') icon = '🎨';
+            else if (fileData.type === 'javascript') icon = 'JS';
+            else if (fileData.type === 'image') icon = '🖼️';
+
+            const depth = (path.match(/\//g) || []).length;
+            item.style.paddingLeft = `${8 + depth * 15}px`;
+            item.innerHTML = `<span class="icon">${icon}</span>${path.split('/').pop()}`;
+            item.title = path;
+
+            if (fileData.type !== 'image') {
+                item.addEventListener('click', () => openFileInEditor(path));
+            } else {
+                item.style.cursor = 'default';
+                item.style.opacity = '0.7';
+            }
+
+            fileExplorer.appendChild(item);
+        });
+    }
+
+    function openFileInEditor(path) {
+        if (!projectFiles[path] || projectFiles[path].type === 'image') return;
+
+        activeFilePath = path;
+        const fileData = projectFiles[path];
+
+        document.querySelectorAll('.file-explorer-item.active').forEach(el => el.classList.remove('active'));
+        const activeItem = document.querySelector(`.file-explorer-item[data-path="${path}"]`);
+        if(activeItem) activeItem.classList.add('active');
+
+        htmlEditor.disabled = true;
+        cssEditor.disabled = true;
+
+        if (fileData.type === 'html') {
+            htmlEditor.value = fileData.originalBody;
+            htmlEditor.disabled = false;
+            lastFocusedEditorType = 'html';
+            previewTargetHtmlPath = path; // Set the HTML file to be previewed
+            handleHtmlInput(); // This will trigger a preview update
+        } else if (fileData.type === 'css') {
+            cssEditor.value = fileData.content;
+            cssEditor.disabled = false;
+            lastFocusedEditorType = 'css';
+            handleCssInput(); // This will trigger a preview update
+        } else if (fileData.type === 'javascript') {
+            // JS editing is not directly supported in the text areas
+            htmlEditor.value = `// JavaScript file: ${path}\n// Editing is not supported in the editor.\n// The file is loaded in the preview.`;
+            cssEditor.value = '';
+            updatePreview();
+        }
+        saveBtn.disabled = false;
+    }
+
+    function saveFile() {
+        if (!activeFilePath || !projectFiles[activeFilePath]) {
+            alert("保存対象のファイルが選択されていません。");
+            return;
+        }
+        const fileData = projectFiles[activeFilePath];
+
+        // ファイル名から拡張子とベース名を分離
+        const pathParts = activeFilePath.split('/');
+        const originalFilename = pathParts[pathParts.length - 1]; // e.g., "index.html"
+        const nameParts = originalFilename.split('.');
+        const ext = nameParts.length > 1 ? `.${nameParts.pop()}` : ''; // e.g., ".html"
+        const baseName = nameParts.join('.'); // e.g., "index"
+        
+        // 新しいファイル名を生成 (例: index_.html)
+        const newFilename = `${baseName}_${ext}`;
+
+        let contentToDownload;
+        let mimeType;
+
+        if (fileData.type === 'html') {
+            // ダウンロード用に完全なHTMLドキュメントを再構築
+            contentToDownload = `<!DOCTYPE html><html lang="ja"><head>${fileData.originalHead}</head>${fileData.bodyTag}${htmlEditor.value}</body></html>`;
+            mimeType = 'text/html;charset=utf-8';
+        } else if (fileData.type === 'css') {
+            contentToDownload = cssEditor.value;
+            mimeType = 'text/css;charset=utf-8';
+        } else {
+            alert("このファイルタイプは保存をサポートしていません。");
+            return;
+        }
+
+        if (contentToDownload !== undefined) {
+             downloadFile(newFilename, contentToDownload, mimeType);
+        }
+    }
+
+    function resolveRelativePath(basePath, relativePath) {
+        if (!basePath || !relativePath) return relativePath;
+        try {
+            // Create a dummy base URL to correctly resolve relative paths like ../
+            const baseUrl = 'http://dummy.com/' + (basePath.substring(0, basePath.lastIndexOf('/') + 1));
+            const url = new URL(relativePath, baseUrl);
+            return url.pathname.substring(1); // Remove leading '/'
+        } catch (e) {
+            console.error("Could not resolve path:", {basePath, relativePath});
+            return relativePath;
+        }
+    }
+
+    // --- UNDO/REDO ---
+    function updateUndoRedoButtons() { const state = editorStates[lastFocusedEditorType]; undoBtn.disabled = state.undoStack.length <= 1; redoBtn.disabled = state.redoStack.length === 0; }
+    function recordState(editorType, force = false) { const state = editorStates[editorType]; const editor = editorType === 'html' ? htmlEditor : cssEditor; const currentValue = editor.value; const lastState = state.undoStack.length > 0 ? state.undoStack[state.undoStack.length - 1] : null; if (currentValue !== lastState) { if (!force) { const timer = editorType === 'html' ? htmlTypingTimer : cssTypingTimer; clearTimeout(timer); if (editorType === 'html') { htmlTypingTimer = setTimeout(() => recordState(editorType, true), TYPING_DEBOUNCE_DELAY); } else { cssTypingTimer = setTimeout(() => recordState(editorType, true), TYPING_DEBOUNCE_DELAY); } return; } state.undoStack.push(currentValue); state.redoStack = []; if (state.undoStack.length > MAX_HISTORY) { state.undoStack.shift(); } updateUndoRedoButtons(); } }
+    function forceRecordState(editorType) { const timer = editorType === 'html' ? htmlTypingTimer : cssTypingTimer; clearTimeout(timer); recordState(editorType, true); }
+    function undo(editorType) { const state = editorStates[editorType]; const editor = editorType === 'html' ? htmlEditor : cssEditor; forceRecordState(editorType); if (state.undoStack.length > 1) { const currentState = state.undoStack.pop(); state.redoStack.push(currentState); const prevState = state.undoStack[state.undoStack.length - 1]; editor.value = prevState; if (editorType === 'html') handleHtmlInput(true); else handleCssInput(true); } updateUndoRedoButtons(); editor.focus(); }
+    function redo(editorType) { const state = editorStates[editorType]; const editor = editorType === 'html' ? htmlEditor : cssEditor; if (state.redoStack.length > 0) { const nextState = state.redoStack.pop(); state.undoStack.push(nextState); editor.value = nextState; if (editorType === 'html') handleHtmlInput(true); else handleCssInput(true); } updateUndoRedoButtons(); editor.focus(); }
+    function handleUndo() { undo(lastFocusedEditorType); }
+    function handleRedo() { redo(lastFocusedEditorType); }
+
+    // --- CORE EDITOR FUNCTIONS ---
+    function updatePreview() {
+        let finalHtml;
+
+        if (Object.keys(projectFiles).length > 0 && previewTargetHtmlPath) {
+            const fileData = projectFiles[previewTargetHtmlPath];
+
+            // Use the live content from the editor if it's the active file
+            const bodyContent = (activeFilePath === previewTargetHtmlPath && fileData.type === 'html')
+                ? htmlEditor.value
+                : fileData.originalBody;
+
+            // Reconstruct the full HTML from its parts
+            const fullHtmlString = `<!DOCTYPE html><html lang="ja"><head>${fileData.originalHead}</head>${fileData.bodyTag}${bodyContent}</body></html>`;
+
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(fullHtmlString, "text/html");
+
+            // Find all elements with src or href and replace with blob URLs
+            doc.querySelectorAll('[href], [src]').forEach(el => {
+                const attributeName = el.hasAttribute('href') ? 'href' : 'src';
+                const originalPath = el.getAttribute(attributeName);
+
+                if (!originalPath || originalPath.startsWith('http') || originalPath.startsWith('data:') || originalPath.startsWith('blob:') || originalPath.startsWith('#')) {
+                    return; // Skip absolute paths, data URIs, blob URLs, and anchors
+                }
+
+                // Resolve the path relative to the current HTML file
+                const resolvedPath = resolveRelativePath(previewTargetHtmlPath, originalPath);
+
+                // If a corresponding blob URL exists in our project files, use it
+                if (projectFiles[resolvedPath] && projectFiles[resolvedPath].objectURL) {
+                    el.setAttribute(attributeName, projectFiles[resolvedPath].objectURL);
+                } else {
+                    console.warn(`Could not find a loaded file for path: ${originalPath} (resolved to: ${resolvedPath})`);
+                }
+            });
+
+            finalHtml = doc.documentElement.outerHTML;
+        } else {
+            // Fallback for when no project is loaded
+            const rawHtml = htmlEditor.value;
+            const cssToUse = cssEditor.value;
+            finalHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${cssToUse}</style></head><body>${rawHtml}</body></html>`;
+        }
+
+        designPreview.srcdoc = finalHtml;
+    }
+
+    function handleHtmlInput(isUndoOrRedo = false) {
+        renderHighlights(htmlEditor, htmlHighlighter);
+        updatePreview();
+        updateSelectorList();
+        updateColorPalette();
+        if (!isUndoOrRedo) { recordState('html'); }
+    }
+
+    function handleCssInput(isUndoOrRedo = false) {
+        // When CSS is edited, update the corresponding blob URL for live preview
+        if (activeFilePath && projectFiles[activeFilePath] && projectFiles[activeFilePath].type === 'css') {
+            const fileData = projectFiles[activeFilePath];
+            // Revoke the old URL to prevent memory leaks
+            if (fileData.objectURL) {
+                URL.revokeObjectURL(fileData.objectURL);
+            }
+            // Create a new blob and URL from the updated editor content
+            const blob = new Blob([cssEditor.value], { type: 'text/css' });
+            fileData.objectURL = URL.createObjectURL(blob);
+        }
+
+        renderHighlights(cssEditor, cssHighlighter);
+        updatePreview();
+        updateColorPalette();
+        if (!isUndoOrRedo) { recordState('css'); }
+    }
+
+    function insertTextAtCursor(editor, text, offset = 0) { const start = editor.selectionStart; const end = editor.selectionEnd; editor.value = editor.value.substring(0, start) + text + editor.value.substring(end); editor.selectionStart = editor.selectionEnd = start + text.length + offset; editor.focus(); }
+    function initEditor(textarea, highlighter) { textarea.addEventListener('scroll', () => { highlighter.scrollTop = textarea.scrollTop; highlighter.scrollLeft = textarea.scrollLeft; }); highlighter.innerHTML = ' '; }
+    function renderHighlights(editor, highlighter) { const text = editor.value; const escapedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); if (!activeHighlightColor) { highlighter.innerHTML = escapedText; return; } const safeColor = activeHighlightColor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); let highlightRegex; if (activeHighlightColor.startsWith('#')) { highlightRegex = new RegExp(`${safeColor}\\b`, 'gi'); } else if (activeHighlightColor.includes('(')) { highlightRegex = new RegExp(safeColor, 'gi'); } else { highlightRegex = new RegExp(`\\b${safeColor}\\b`, 'gi'); } const lines = escapedText.split('\n'); let html = ''; for (const line of lines) { if (line.match(highlightRegex)) { html += `<span class="highlighted-line">${line || ' '}</span>`; } else { html += (line || ' ') + '\n'; } } highlighter.innerHTML = html.trimEnd(); }
+    function renderAllHighlights() { renderHighlights(htmlEditor, htmlHighlighter); renderHighlights(cssEditor, cssHighlighter); }
+    function updateColorPalette() { const text = htmlEditor.value + "\n" + cssEditor.value; const colorRegex = /(#[0-9a-f]{3,8}\b|rgba?\([^)]+\)|hsla?\([^)]+\b)/gi; let matches = text.match(colorRegex) || []; const wordRegex = /\b[a-z]+\b/gi; let words = text.match(wordRegex) || []; words.forEach(word => { if (validCssColors.has(word.toLowerCase())) { matches.push(word); } }); const uniqueColors = [...new Set(matches.map(c => c.toLowerCase()))]; colorPalette.innerHTML = ""; if (uniqueColors.length === 0) { colorPalette.innerHTML = `<p style="font-size:12px; margin:0; color:#888;">コードに色を記述すると、ここに表示されます。</p>`; return; } uniqueColors.forEach(color => { const chip = document.createElement('div'); chip.className = 'color-chip'; chip.style.backgroundColor = color; chip.title = `「${color}」が使われている行をハイライト`; if (color === activeHighlightColor) chip.classList.add('active'); chip.addEventListener('click', () => { if (chip.classList.contains('active')) { activeHighlightColor = null; } else { document.querySelectorAll('.color-chip.active').forEach(c => c.classList.remove('active')); activeHighlightColor = color; chip.classList.add('active'); } renderAllHighlights(); }); colorPalette.appendChild(chip); }); }
+    function updateSelectorList() { const content = htmlEditor.value; const classMatches = content.match(/class="([^"]*)"/g) || []; const idMatches = content.match(/id="([^"]*)"/g) || []; const classes = new Set(); const ids = new Set(); classMatches.forEach(match => { match.replace(/class="|"/g, "").split(" ").forEach(cls => { if (cls) classes.add(cls); }); }); idMatches.forEach(match => { const id = match.replace(/id="|"/g, ""); if (id) ids.add(id); }); selectorList.innerHTML = ""; const createBtn = (selector, type) => { const btn = document.createElement("button"); btn.textContent = `${type}${selector}`; btn.title = `${type}${selector} セレクタを挿入`; btn.onclick = () => insertCssSelector(`${type}${selector}`); selectorList.appendChild(btn); }; ids.forEach(id => createBtn(id, "#")); classes.forEach(cls => createBtn(cls, ".")); if (selectorList.children.length === 0) { selectorList.innerHTML = `<p style="font-size:12px; margin:0; color:#888;">HTMLにclassやidを記述すると、ここにボタンが自動で表示されます。</p>`; } }
+    function insertCssSelector(selector) { forceRecordState('css'); const textToInsert = `\n${selector} {\n\t\n}\n`; insertTextAtCursor(cssEditor, textToInsert, -2); handleCssInput(); forceRecordState('css'); }
+    function setEndTagMode(isActive) { isEndTagMode = isActive; endTagToggleBtn.classList.toggle("active", isActive); updateButtonAppearance(); }
+    function updateButtonAppearance() { document.querySelectorAll('.controls [data-tag]').forEach(btn => { const tag = btn.dataset.tag; const desc = btn.dataset.desc || tag; const isSelfClosing = btn.dataset.selfclosing === "true"; btn.disabled = isEndTagMode && isSelfClosing; if (isEndTagMode && !isSelfClosing) { btn.innerHTML = `</${tag}>`; btn.title = `</${tag}> 終了タグを挿入します`; } else if (btn.id !== 'heading-btn') { btn.innerHTML = `<${tag}>`; btn.title = `<${tag}>タグ（${desc}）を挿入します`; } else { btn.innerHTML = `<${btn.dataset.tag}>`; btn.title = `<${btn.dataset.tag}>タグ（見出し）を挿入します`; } }); }
+    function insertTag(tag) { forceRecordState('html'); const isSelfClosing = document.querySelector(`[data-tag="${tag}"]`).dataset.selfclosing === "true"; let textToInsert = ""; if (isEndTagMode && !isSelfClosing) { textToInsert = `</${tag}>`; } else if (!isEndTagMode) { const selectedText = htmlEditor.value.substring(htmlEditor.selectionStart, htmlEditor.selectionEnd); textToInsert = isSelfClosing ? (tag === "img" ? `<img src="" alt="">` : `<${tag}>`) : `<${tag}>${selectedText}</${tag}>`; } if (textToInsert) { insertTextAtCursor(htmlEditor, textToInsert); if (textToInsert.includes("</")) { htmlEditor.selectionStart -= textToInsert.substring(textToInsert.indexOf("</")).length; } handleHtmlInput(); forceRecordState('html'); } }
+    function insertAttribute(attrName) { forceRecordState('html'); const attrValue = attributeInput.value.trim(); if (!attrValue) { alert("属性名を入力ボックスに入力してください。"); return; } const pos = htmlEditor.selectionStart; const textBefore = htmlEditor.value.substring(0, pos); const lastOpeningBracket = textBefore.lastIndexOf("<"); const lastClosingBracket = textBefore.lastIndexOf(">"); if (lastOpeningBracket > lastClosingBracket) { const textToInsert = ` ${attrName}="${attrValue}"`; insertTextAtCursor(htmlEditor, textToInsert); attributeInput.value = ""; handleHtmlInput(); forceRecordState('html'); } }
+    function insertHtmlTemplate(templateName) { forceRecordState('html'); const templates = { ul: '<ul>\n\t<li>リスト項目1</li>\n\t<li>リスト項目2</li>\n</ul>', ol: '<ol>\n\t<li>リスト項目1</li>\n\t<li>リスト項目2</li>\n</ol>', dl: '<dl>\n\t<dt>定義用語</dt>\n\t<dd>定義の説明</dd>\n</dl>', select: '<select name="">\n\t<option value="1">選択肢1</option>\n\t<option value="2">選択肢2</option>\n</select>' }; const template = templates[templateName]; if (template) { insertTextAtCursor(htmlEditor, template); handleHtmlInput(); forceRecordState('html'); } }
+    function generateTable() { forceRecordState('html'); const rowsStr = prompt("行数を入力してください (例: 3)", "3"); if (rowsStr === null) return; const rows = parseInt(rowsStr, 10); if (isNaN(rows) || rows <= 0) { alert("無効な行数です。"); return; } const colsStr = prompt("列数を入力してください (例: 4)", "4"); if (colsStr === null) return; const cols = parseInt(colsStr, 10); if (isNaN(cols) || cols <= 0) { alert("無効な列数です。"); return; } let tableHtml = '<table>\n'; tableHtml += '\t<caption>テーブルのタイトル</caption>\n'; tableHtml += '\t<thead>\n'; tableHtml += '\t\t<tr>\n'; for (let i = 1; i <= cols; i++) { tableHtml += `\t\t\t<th>見出し${i}</th>\n`; } tableHtml += '\t\t</tr>\n'; tableHtml += '\t</thead>\n'; tableHtml += '\t<tbody>\n'; const dataRows = rows > 1 ? rows - 1 : 1; for (let i = 1; i <= dataRows; i++) { tableHtml += '\t\t<tr>\n'; for (let j = 1; j <= cols; j++) { tableHtml += `\t\t\t<td>データ</td>\n`; } tableHtml += '\t\t</tr>\n'; } tableHtml += '\t</tbody>\n'; tableHtml += '</table>'; insertTextAtCursor(htmlEditor, tableHtml); handleHtmlInput(); forceRecordState('html'); }
+    function toggleDropdown(e) { e.stopPropagation(); dropdownContent.classList.toggle("show"); }
+    endTagToggleBtn.addEventListener("click", () => setEndTagMode(!isEndTagMode));
+    window.addEventListener("keydown", e => { if (e.key === "Shift" && !e.repeat) setEndTagMode(true); });
+    window.addEventListener("keyup", e => { if (e.key === "Shift") setEndTagMode(false); });
+    dropdownContent.addEventListener("click", function (e) { const t = e.target.closest("a"); if (t) { e.preventDefault(); document.getElementById("heading-btn").dataset.tag = t.dataset.level; updateButtonAppearance(); dropdownContent.classList.remove("show"); } });
+    window.addEventListener("click", function (e) { if (!e.target.closest(".dropdown")) dropdownContent.classList.remove("show"); if (!cssEditor.contains(e.target) && !cssHelper.contains(e.target) && !e.target.closest(".controls") && !e.target.closest("#selector-list-container")) { cssHelper.style.display = "none"; } });
+    const accordionHeaders = document.querySelectorAll(".accordion-header"); accordionHeaders.forEach(header => { header.addEventListener("click", () => { const currentlyActive = document.querySelector(".accordion-header.active"); if (currentlyActive && currentlyActive !== header) { currentlyActive.classList.remove("active"); currentlyActive.querySelector(".accordion-indicator").textContent = "[+]"; } header.classList.toggle("active"); const indicator = header.querySelector(".accordion-indicator"); indicator.textContent = header.classList.contains("active") ? "[-]" : "[+]"; }); });
+    function updateHelperInputs(prop, propDef) { const side = document.getElementById('prop-side').value; const inputsContainer = document.getElementById('helper-inputs'); let html = ''; if (side === 'all') { const defaultValue = propDef.default || '0'; html = `<div class="prop-group"><label>${prop}:</label><div class="four-values-grid"><label for="prop-val-top">上</label><input type="text" id="prop-val-top" value="${defaultValue}"><label for="prop-val-right">右</label><input type="text" id="prop-val-right" value="${defaultValue}"><label for="prop-val-bottom">下</label><input type="text" id="prop-val-bottom" value="${defaultValue}"><label for="prop-val-left">左</label><input type="text" id="prop-val-left" value="${defaultValue}"></div></div><div class="prop-group"><label></label><input type="checkbox" id="sync-all" checked onchange="syncFourValues(this)"><span>すべて同じ値</span></div>`; } else { html = `<div class="prop-group"><label>値:</label><input type="text" id="prop-value" value="${propDef.default || ''}"></div>`; } inputsContainer.innerHTML = html; if (side === 'all') { document.getElementById('prop-val-top').oninput = () => syncFourValues(document.getElementById('sync-all')); } }
+    function syncFourValues(checkbox) { if (!checkbox.checked) return; const sourceValue = document.getElementById('prop-val-top').value; ['right', 'bottom', 'left'].forEach(dir => { document.getElementById(`prop-val-${dir}`).value = sourceValue; }); }
+    function toggleFontInStack(fontName) { const input = document.getElementById('prop-value'); let stack = input.value.split(',').map(f => f.trim()).filter(f => f); const formattedFont = fontName.includes(' ') ? `"${fontName}"` : fontName; const index = stack.findIndex(f => f.toLowerCase().replace(/['"]/g, '') === fontName.toLowerCase()); if (index > -1) { stack.splice(index, 1); } else { stack.push(formattedFont); } input.value = stack.join(', '); updateFontChipsState(); }
+    function updateFontChipsState() { const input = document.getElementById('prop-value'); if (!input) return; const currentStack = input.value.split(',').map(f => f.trim().replace(/['"]/g, '').toLowerCase()); document.querySelectorAll('.font-chip-btn').forEach(chip => { chip.classList.toggle('active', currentStack.includes(chip.textContent.toLowerCase())); }); }
+    function openCssHelper(prop, value = null) { forceRecordState('css'); currentEditInfo = null; const propDef = cssProperties[prop]; if (!propDef) return; const content = document.getElementById('css-helper-content'); let html = ''; const generateSideSelector = () => `<div class="prop-group"><label for="prop-side">適用する辺:</label><select id="prop-side" onchange="updateHelperInputs('${prop}', cssProperties['${prop}'])"><option value="all">全辺</option><option value="top">上</option><option value="right">右</option><option value="bottom">下</option><option value="left">左</option></select></div>`; switch (propDef.type) { case 'color': html = `<div class="prop-group"><label>${prop}:</label><input type="color" id="prop-value" value="${value || '#000000'}"></div>`; break; case 'unit': const currentVal = value ? value.match(/(-?\d*\.?\d*)\s*([a-z%]*)/i) : null; const num = currentVal ? currentVal[1] : propDef.default || ''; const unit = currentVal ? currentVal[2] : (propDef.units.length > 0 ? propDef.units[0] : ''); const step = propDef.isDecimal ? "0.1" : "1"; const min = propDef.min !== undefined ? `min="${propDef.min}"` : ''; const max = propDef.max !== undefined ? `max="${propDef.max}"` : ''; html = `<div class="prop-group"><label>${prop}:</label><input type="number" id="prop-value" value="${num}" step="${step}" ${min} ${max}><select id="prop-unit">${propDef.units.map(u => `<option value="${u}" ${u === unit ? "selected" : ""}>${u || '---'}</option>`).join("")}</select></div>`; break; case 'select': html = `<div class="prop-group"><label>${prop}:</label><select id="prop-value">${propDef.values.map(v => `<option value="${v.value}" title="${v.desc}" ${v.value === value ? "selected" : ""}>${v.value}</option>`).join("")}</select></div>`; break; case 'text': html = `<div class="prop-group"><label>${prop}:</label><input type="text" id="prop-value" value="${value || propDef.default}" style="flex-grow:1;"></div>`; break; case 'font-stack-builder': html = `<div class="prop-group"><label>${prop}:</label><input type="text" id="prop-value" oninput="updateFontChipsState()" value="${value || propDef.default}" style="flex-grow:1;"></div><div id="font-chips">${propDef.fonts.map(f => `<button class="font-chip-btn" onclick="toggleFontInStack('${f}')">${f}</button>`).join('')}<hr style="width:100%; border:0; border-top: 1px solid #ccc; margin: 5px 0;">${propDef.fallbacks.map(f => `<button class="font-chip-btn" onclick="toggleFontInStack('${f}')">${f}</button>`).join('')}</div>`; break; case 'shorthand-boxmodel': html = `${generateSideSelector()}<div id="helper-inputs"></div>`; break; case 'shorthand-border-master': html = `${generateSideSelector()}<div class="prop-group"><label>width:</label><input type="number" id="border-width" value="1" min="0"> <select id="border-width-unit"><option>px</option><option>em</option><option>rem</option></select></div><div class="prop-group"><label>style:</label><select id="border-style">${[{v:"solid",d:"実線"},{v:"dotted",d:"点線"},{v:"dashed",d:"破線"},{v:"double",d:"二重線"},{v:"groove",d:"立体的な溝"},{v:"ridge",d:"立体的な隆起"},{v:"inset",d:"内側に凹む"},{v:"outset",d:"外側に隆起"},{v:"none",d:"線なし"}].map(o=>`<option value="${o.v}" title="${o.d}">${o.v}</option>`).join('')}</select></div><div class="prop-group"><label>color:</label><input type="color" id="border-color" value="#000000"></div>`; break; case 'border-individual': html = generateSideSelector(); if (propDef.input === 'width') { html += `<div class="prop-group"><label>width:</label><input type="number" id="border-width" value="1" min="0"> <select id="border-width-unit"><option>px</option><option>em</option><option>rem</option></select></div>`; } if (propDef.input === 'style') { html += `<div class="prop-group"><label>style:</label><select id="border-style">${[{v:"solid",d:"実線"},{v:"dotted",d:"点線"},{v:"dashed",d:"破線"},{v:"double",d:"二重線"},{v:"groove",d:"立体的な溝"},{v:"ridge",d:"立体的な隆起"},{v:"inset",d:"内側に凹む"},{v:"outset",d:"外側に隆起"},{v:"none",d:"線なし"}].map(o=>`<option value="${o.v}" title="${o.d}">${o.v}</option>`).join('')}</select></div>`; } if (propDef.input === 'color') { html += `<div class="prop-group"><label>color:</label><input type="color" id="border-color" value="#000000"></div>`; } break; case 'shorthand-background': html = `<div class="prop-group"><label>color:</label><input type="color" id="bg-color" value="#ffffff"></div><div class="prop-group"><label>image:</label><input type="text" id="bg-image" placeholder="url('path/to/image.jpg')"></div><div class="prop-group"><label>repeat:</label><select id="bg-repeat">${[{v:"repeat",d:"縦横に繰り返す"},{v:"no-repeat",d:"繰り返さない"},{v:"repeat-x",d:"横方向に繰り返す"},{v:"repeat-y",d:"縦方向に繰り返す"}].map(o=>`<option value="${o.v}" title="${o.d}">${o.v}</option>`).join('')}</select></div><div class="prop-group"><label>position:</label><input type="text" id="bg-position" value="center center" placeholder="e.g., center, top left"></div><div class="prop-group"><label>size:</label><input type="text" id="bg-size" value="auto" placeholder="e.g., cover, contain, 50%"></div>`; break; case 'shorthand-font': html = `<div class="prop-group"><label>style:</label><select id="font-style">${cssProperties['font-style'].values.map(v=>`<option value="${v.value}" title="${v.desc}">${v.value}</option>`).join('')}</select></div><div class="prop-group"><label>weight:</label><select id="font-weight">${cssProperties['font-weight'].values.map(v=>`<option value="${v.value}" title="${v.desc}">${v.value}</option>`).join('')}</select></div><div class="prop-group"><label>size/line-height:</label><input type="number" id="font-size" value="16"><select id="font-size-unit"><option>px</option><option>rem</option><option>em</option></select> / <input type="number" id="font-line-height" value="1.6" step="0.1"></div><div class="prop-group"><label>family:</label><input type="text" id="font-family" value="sans-serif" style="flex-grow:1;"></div>`; break; case 'builder-clip-path': html = `<div class="prop-group"><label>shape:</label><select id="clip-shape" onchange="updateClipPathInputs(this.value)">${propDef.shapes.map(s => `<option value="${s}">${s}()</option>`).join('')}</select></div><div id="clip-path-inputs"></div>`; break; case 'builder-scroll-snap': html = `<div class="prop-group"><label>axis:</label><select id="snap-axis">${propDef.axes.map(v => `<option value="${v}">${v}</option>`).join('')}</select></div><div class="prop-group"><label>strictness:</label><select id="snap-strictness">${propDef.strictness.map(v => `<option value="${v}">${v}</option>`).join('')}</select></div>`; break; case 'builder-text-emphasis': html = `<div class="prop-group"><label>style:</label><select id="emphasis-style">${propDef.styles.map(v => `<option value="${v}">${v}</option>`).join('')}</select></div><div class="prop-group"><label>color:</label><input type="color" id="emphasis-color" value="#000000"> <input type="checkbox" id="include-color"><span>色を指定する</span></div>`; break; case 'builder-will-change': html = `<div class="prop-group"><label>properties:</label><input type="text" id="prop-value" value="transform"></div><div id="font-chips">${propDef.values.map(f => `<button class="font-chip-btn" onclick="toggleWillChangeProp('${f}')">${f}</button>`).join('')}</div>`; break; case 'builder-grid-auto-flow': html = `<div class="prop-group"><label>direction:</label><select id="grid-flow-dir">${propDef.directions.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div><div class="prop-group"><label></label><input type="checkbox" id="grid-flow-dense"><span>denseアルゴリズムを使用する</span></div>`; break; case 'builder-mask-image': html = `<div class="prop-group"><label>source type:</label><select id="mask-source-type" onchange="updateMaskInputs(this.value)">${propDef.sources.map(s => `<option value="${s}">${s}</option>`).join('')}</select></div><div id="mask-source-inputs"></div>`; break; case 'builder-backdrop-filter': html = `<div class="prop-group"><label>filters:</label><input type="text" id="prop-value" value="blur(5px)"></div><p style="font-size:12px; margin:0 0 10px; color:#555;">チップをクリックしてフィルターを追加/編集します。</p><div id="font-chips">${propDef.filters.map(f => `<button class="font-chip-btn" onclick="promptAndAddFilter('${f}')">${f}</button>`).join('')}</div>`; break; case 'builder-line-clamp': html = `<div class="prop-group"><label>表示行数:</label><input type="number" id="prop-value" value="3" min="1"></div><p style="font-size:12px; margin:10px 0 0; color:#555;">※ 関連プロパティも同時に挿入されます。</p>`; break; case 'builder-animation-timeline': html = `<div class="prop-group"><label>source:</label><select id="prop-value">${propDef.sources.map(s => `<option value="${s}">${s}</option>`).join('')}</select></div>`; break; case 'builder-scrollbar-gutter': html = `<div class="prop-group"><label>base:</label><select id="gutter-base">${propDef.bases.map(b => `<option value="${b}">${b}</option>`).join('')}</select></div><div class="prop-group"><label></label><input type="checkbox" id="gutter-both"><span>both-edges を追加</span></div>`; break; case 'builder-content': html = `<div class="prop-group"><label>type:</label><select id="content-type" onchange="updateContentInputs(this.value)">${propDef.types.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div><div id="content-inputs"></div>`; break; } html += `<button onclick="applyCssChange('${prop}', cssProperties['${prop}'])">挿入</button>`; content.innerHTML = html; if(propDef.type === 'shorthand-boxmodel') updateHelperInputs(prop, propDef); else if(propDef.type === 'font-stack-builder') updateFontChipsState(); else if (propDef.type === 'builder-clip-path') updateClipPathInputs(propDef.shapes[0]); else if (propDef.type === 'builder-will-change') updateWillChangeChipsState(); else if (propDef.type === 'builder-mask-image') updateMaskInputs(propDef.sources[0]); else if (propDef.type === 'builder-content') updateContentInputs(propDef.types[0]); cssHelper.style.display = "block"; }
+    function applyCssChange(prop, propDef) { let finalValue = ''; let finalProp = prop; const sideSelector = document.getElementById('prop-side'); const side = sideSelector ? sideSelector.value : 'all'; if (sideSelector && side !== 'all') { if (prop.includes('-')) { const [base, sub] = prop.split('-'); finalProp = `${base}-${side}-${sub}`; } else { finalProp = `${prop}-${side}`; } } switch (propDef.type) { case 'unit': case 'select': case 'color': case 'text': case 'font-stack-builder': finalValue = (document.getElementById('prop-value')?.value || '0') + (document.getElementById('prop-unit')?.value || ''); if (propDef.type === 'color' || propDef.type === 'text' || propDef.type === 'select' || propDef.type === 'font-stack-builder') { finalValue = document.getElementById("prop-value").value; } break; case 'shorthand-boxmodel': if (side === 'all') { const top = document.getElementById('prop-val-top').value.trim() || '0'; const right = document.getElementById('prop-val-right').value.trim() || '0'; const bottom = document.getElementById('prop-val-bottom').value.trim() || '0'; const left = document.getElementById('prop-val-left').value.trim() || '0'; if (top === right && top === bottom && top === left) { finalValue = top; } else if (top === bottom && right === left) { finalValue = `${top} ${right}`; } else if (right === left) { finalValue = `${top} ${right} ${bottom}`; } else { finalValue = `${top} ${right} ${bottom} ${left}`; } } else { finalValue = document.getElementById('prop-value').value; } break; case 'shorthand-border-master': case 'border-individual': const parts = []; if (document.getElementById('border-width')) parts.push(`${document.getElementById('border-width').value}${document.getElementById('border-width-unit').value}`); if (document.getElementById('border-style')) parts.push(document.getElementById('border-style').value); if (document.getElementById('border-color')) parts.push(document.getElementById('border-color').value); finalValue = parts.join(' '); break; case 'shorthand-background': const bgParts = [document.getElementById('bg-color').value, document.getElementById('bg-image').value, document.getElementById('bg-repeat').value, document.getElementById('bg-position').value, document.getElementById('bg-size').value ? `/ ${document.getElementById('bg-size').value}` : '',]; finalValue = bgParts.filter(p => p && p.trim() && p !== '#ffffff').join(' ').trim(); break; case 'shorthand-font': const fStyle = document.getElementById('font-style').value; const fWeight = document.getElementById('font-weight').value; const fSize = document.getElementById('font-size').value + document.getElementById('font-size-unit').value; const fLh = document.getElementById('font-line-height').value; const fFamily = document.getElementById('font-family').value; finalValue = `${fStyle} ${fWeight} ${fSize}/${fLh} ${fFamily}`; break; case 'builder-clip-path': const shape = document.getElementById('clip-shape').value; let params = ''; if (shape === 'inset') params = document.getElementById('clip-inset').value; else if (shape === 'circle' || shape === 'ellipse') params = `farthest-side at ${document.getElementById('clip-pos-x').value} ${document.getElementById('clip-pos-y').value}`; else if (shape === 'polygon') params = document.getElementById('clip-polygon').value; finalValue = `${shape}(${params})`; break; case 'builder-scroll-snap': finalValue = `${document.getElementById('snap-axis').value} ${document.getElementById('snap-strictness').value}`; break; case 'builder-text-emphasis': finalValue = document.getElementById('emphasis-style').value; if (document.getElementById('include-color').checked) { finalValue += ` ${document.getElementById('emphasis-color').value}`; } break; case 'builder-will-change': case 'builder-backdrop-filter': case 'builder-animation-timeline': finalValue = document.getElementById('prop-value').value; break; case 'builder-grid-auto-flow': finalValue = document.getElementById('grid-flow-dir').value; if (document.getElementById('grid-flow-dense').checked) { finalValue += ' dense'; } break; case 'builder-mask-image': const maskType = document.getElementById('mask-source-type').value; if (maskType === 'url') { finalValue = `url(${document.getElementById('mask-url').value})`; } else { finalValue = `${maskType}(${document.getElementById('mask-gradient').value})`; } break; case 'builder-line-clamp': const lines = document.getElementById('prop-value').value; const textToInsertMulti = `\tdisplay: -webkit-box;\n\t-webkit-box-orient: vertical;\n\t-webkit-line-clamp: ${lines};\n\toverflow: hidden;\n`; insertTextAtCursor(cssEditor, textToInsertMulti); handleCssInput(); cssHelper.style.display = 'none'; return; case 'builder-scrollbar-gutter': finalValue = document.getElementById('gutter-base').value; if (finalValue === 'stable' && document.getElementById('gutter-both').checked) { finalValue += ' both-edges'; } break; case 'builder-content': const contentType = document.getElementById('content-type').value; switch(contentType) { case 'string': finalValue = `'${document.getElementById('content-string').value}'`; break; case 'attr': finalValue = `attr(${document.getElementById('content-attr').value})`; break; case 'url': finalValue = `url(${document.getElementById('content-url').value})`; break; case 'none': finalValue = 'none'; break; } break; } const textToInsert = `\t${finalProp}: ${finalValue};\n`; insertTextAtCursor(cssEditor, textToInsert); handleCssInput(); forceRecordState('css'); cssHelper.style.display = 'none'; }
+    function updateClipPathInputs(shape) { const container = document.getElementById('clip-path-inputs'); let html = ''; switch(shape) { case 'inset': html = `<div class="prop-group"><label>values:</label><input type="text" id="clip-inset" value="10% 20% 30% 40%"></div>`; break; case 'circle': case 'ellipse': html = `<div class="prop-group"><label>position:</label><input type="text" id="clip-pos-x" value="50%" style="width: 60px;"><input type="text" id="clip-pos-y" value="50%" style="width: 60px;"></div>`; break; case 'polygon': html = `<div class="prop-group"><label>points:</label><input type="text" id="clip-polygon" value="50% 0%, 100% 50%, 50% 100%, 0% 50%"></div>`; break; } container.innerHTML = html; }
+    function toggleWillChangeProp(propName) { const input = document.getElementById('prop-value'); let props = new Set(input.value.split(',').map(p => p.trim()).filter(p => p)); if (props.has(propName)) { props.delete(propName); } else { props.add(propName); } input.value = Array.from(props).join(', '); updateWillChangeChipsState(); }
+    function updateWillChangeChipsState() { const input = document.getElementById('prop-value'); if (!input) return; const currentProps = new Set(input.value.split(',').map(p => p.trim())); document.querySelectorAll('#css-helper .font-chip-btn').forEach(chip => { chip.classList.toggle('active', currentProps.has(chip.textContent)); }); }
+    function updateMaskInputs(sourceType) { const container = document.getElementById('mask-source-inputs'); let html = ''; switch(sourceType) { case 'url': html = `<div class="prop-group"><label>url:</label><input type="text" id="mask-url" value="mask.svg"></div>`; break; case 'linear-gradient': html = `<div class="prop-group"><label>gradient:</label><input type="text" id="mask-gradient" value="black, transparent"></div>`; break; case 'radial-gradient': html = `<div class="prop-group"><label>gradient:</label><input type="text" id="mask-gradient" value="circle, black, transparent"></div>`; break; } container.innerHTML = html; }
+    function promptAndAddFilter(filterName) { const defaults = { blur: '5px', brightness: '1.5', contrast: '150%', grayscale: '1', 'hue-rotate': '90deg', invert: '1', opacity: '0.5', saturate: '2', sepia: '1' }; const input = document.getElementById('prop-value'); let filters = input.value.trim() ? input.value.split(' ').filter(f => f) : []; const existingFilterIndex = filters.findIndex(f => f.startsWith(filterName)); const currentVal = existingFilterIndex > -1 ? filters[existingFilterIndex].match(/\((.*)\)/)[1] : (defaults[filterName] || ''); const val = prompt(`「${filterName}」の値を入力してください:`, currentVal); if (val === null) return; const newFilter = `${filterName}(${val})`; if (val.trim() === '') { if (existingFilterIndex > -1) filters.splice(existingFilterIndex, 1); } else { if (existingFilterIndex > -1) { filters[existingFilterIndex] = newFilter; } else { filters.push(newFilter); } } input.value = filters.join(' '); }
+    function updateContentInputs(contentType) { const container = document.getElementById('content-inputs'); let html = ''; switch(contentType) { case 'string': html = `<div class="prop-group"><label>text:</label><input type="text" id="content-string" value=""></div>`; break; case 'attr': html = `<div class="prop-group"><label>attribute:</label><input type="text" id="content-attr" value="data-text"></div>`; break; case 'url': html = `<div class="prop-group"><label>url:</label><input type="text" id="content-url" value=""></div>`; break; } container.innerHTML = html; }
+
+    // --- AI ASSISTANT FUNCTIONS ---
+    function saveApiKey() { const key = apiKeyInput.value.trim(); if (key) { localStorage.setItem('geminiApiKey_html_css', key); GEMINI_API_KEY = key; alert('APIキーを保存しました。'); } else { alert('APIキーを入力してください。'); } }
+    function loadApiKey() { const savedKey = localStorage.getItem('geminiApiKey_html_css'); if (savedKey) { GEMINI_API_KEY = savedKey; apiKeyInput.value = savedKey; } }
+    function setupAiSystemPrompt() { aiSystemPrompt.value = localStorage.getItem('geminiSystemPrompt_html_css') || DEFAULT_SYSTEM_PROMPT; aiSystemPrompt.addEventListener('input', () => { localStorage.setItem('geminiSystemPrompt_html_css', aiSystemPrompt.value); }); resetSystemPromptBtn.addEventListener('click', () => { if (confirm('システムプロンプトをデフォルト設定に戻しますか？')) { aiSystemPrompt.value = DEFAULT_SYSTEM_PROMPT; localStorage.setItem('geminiSystemPrompt_html_css', aiSystemPrompt.value); alert('システムプロンプトをリセットしました。'); } }); }
+    function cleanAiResponse(responseText) { const codeBlockRegex = /```(?:\w+\n)?([\s\S]+?)\n?```/; const match = responseText.match(codeBlockRegex); if (match && match[1]) { return match[1].trim(); } return responseText.trim(); }
+    async function callGenericAi(fullPrompt) { if (!GEMINI_API_KEY) { alert('Gemini APIキーが設定されていません。'); return null; } loadingOverlay.style.display = 'flex'; const model = 'gemini-1.5-flash-latest'; const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`; try { const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: fullPrompt }] }] }) }); if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error.message || `APIエラー: ${response.status}`); } const data = await response.json(); const text = data.candidates[0].content.parts[0].text; return cleanAiResponse(text); } catch (error) { console.error('Gemini API Error:', error); alert(`AIの呼び出し中にエラーが発生しました: ${error.message}`); return null; } finally { loadingOverlay.style.display = 'none'; } }
+    async function handleAiRequest(action) {
+        const userPrompt = aiPromptInput.value.trim();
+        if (!userPrompt) { alert('AIへの指示を入力してください。'); return; }
+        const systemPrompt = aiSystemPrompt.value.trim();
+        if (!systemPrompt) { alert('カスタムシステムプロンプトが空です。'); return; }
+
+        let activeEditor, activeEditorType;
+        if (document.activeElement === htmlEditor || (htmlEditor.selectionStart !== htmlEditor.selectionEnd && document.activeElement !== cssEditor)) { activeEditor = htmlEditor; activeEditorType = 'html'; } else { activeEditor = cssEditor; activeEditorType = 'css'; }
+        const selectedText = activeEditor.value.substring(activeEditor.selectionStart, activeEditor.selectionEnd);
+
+        if (action === 'replaceSelection' && !selectedText) { alert('「選択範囲と置換」を実行するには、まずエディタでコードを選択してください。'); return; }
+
+        forceRecordState('html');
+        forceRecordState('css');
+
+        const fullPrompt = `${systemPrompt}\n\n---\n[ユーザーの指示]\n${userPrompt}\n---\n[HTML 全体]\n${htmlEditor.value}\n---\n[CSS 全体]\n${cssEditor.value}\n---\n${selectedText ? `[現在選択されているコード (${activeEditorType.toUpperCase()})]\n${selectedText}` : ''}\n---`;
+        const result = await callGenericAi(fullPrompt);
+        
+        if (result) {
+            const htmlMatch = result.match(/\[HTML_START\]([\s\S]*?)\[HTML_END\]/);
+            const cssMatch = result.match(/\[CSS_START\]([\s\S]*?)\[CSS_END\]/);
+            const htmlContent = htmlMatch ? htmlMatch[1].trim() : null;
+            const cssContent = cssMatch ? cssMatch[1].trim() : null;
+
+            if (htmlContent !== null && cssContent !== null) {
+                htmlEditor.value = htmlContent;
+                cssEditor.value = cssContent;
+                handleHtmlInput(true);
+                handleCssInput(true);
+                forceRecordState('html');
+                forceRecordState('css');
+                alert('AIがHTMLとCSSを両方のエディタに反映しました。');
+                return;
+            }
+
+            switch (action) {
+                case 'replaceSelection': const start = activeEditor.selectionStart; const end = activeEditor.selectionEnd; activeEditor.value = activeEditor.value.substring(0, start) + result + activeEditor.value.substring(end); activeEditor.selectionStart = start; activeEditor.selectionEnd = start + result.length; break;
+                case 'insertAtCursor': insertTextAtCursor(activeEditor, result); break;
+                case 'replaceAll': activeEditor.value = result; break;
+            }
+            if (activeEditor === htmlEditor) handleHtmlInput(); else handleCssInput();
+            forceRecordState(activeEditorType);
+        }
+    }
+
+    async function aiFormatHtml() { const currentHtml = htmlEditor.value; if (!currentHtml.trim()) { alert('HTMLが空です。'); return; } forceRecordState('html'); const prompt = `以下のHTMLコードを整形してください。インデントや改行を適切に修正し、読みやすくしてください。解説や追加のテキストは不要で、整形されたHTMLコードのみを返してください。\n\n${currentHtml}`; const formattedHtml = await callGenericAi(prompt); if (formattedHtml) { htmlEditor.value = formattedHtml; handleHtmlInput(); forceRecordState('html'); } }
+    async function aiFormatCss() { const currentCss = cssEditor.value; if (!currentCss.trim()) { alert('CSSが空です。'); return; } forceRecordState('css'); const prompt = `以下のCSSコードを整形してください。インデントや改行、プロパティの順序を適切に修正し、読みやすくしてください。解説や追加のテキストは不要で、整形されたCSSコードのみを返してください。\n\n${currentCss}`; const formattedCss = await callGenericAi(prompt); if (formattedCss) { cssEditor.value = formattedCss; handleCssInput(); forceRecordState('css'); } }
+
+    // --- EXPORT & FULL PREVIEW ---
+    function getFullHtmlContent() { const pageTitle = pageTitleInput.value || '無題のページ'; const bodyContent = htmlEditor.value; const cssContent = cssEditor.value; return `<!DOCTYPE html>\n<html lang="ja">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="https://fonts.googleapis.com/css2?family=Kiwi+Maru&family=Noto+Sans+JP&family=Noto+Serif+JP&family=Roboto&display=swap" rel="stylesheet">\n  <title>${pageTitle}</title>\n  <style>\n${cssContent}\n  </style>\n</head>\n<body>\n${bodyContent}\n</body>\n</html>`; }
+    function downloadFile(e,t,n){const o=new Blob([t],{type:n}),l=URL.createObjectURL(o),s=document.createElement("a");s.href=l,s.download=e,document.body.appendChild(s),s.click(),document.body.removeChild(s),URL.revokeObjectURL(l)}
+    document.getElementById("export-html").addEventListener("click",()=>{const e=pageTitleInput.value||"無題のページ",t=htmlEditor.value,n=`<!DOCTYPE html>\n<html lang="ja">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>${e}<\/title>\n</head>\n<body>\n${t}\n<\/body>\n<\/html>`;downloadFile("index.html",n,"text/html;charset=utf-8")});
+    document.getElementById("export-css").addEventListener("click",()=>{downloadFile("style.css",cssEditor.value,"text/css;charset=utf-8")});
+    document.getElementById("export-combined").addEventListener("click",() => { downloadFile('combined.html', getFullHtmlContent(), 'text/html;charset=utf-8'); });
+    openPreviewBtn.addEventListener("click", () => {
+        if (Object.keys(projectFiles).length > 0 && previewTargetHtmlPath) {
+            const blob = new Blob([designPreview.srcdoc], {type: 'text/html'});
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+        } else {
+            const previewContent = getFullHtmlContent();
+            const blob = new Blob([previewContent], {type : 'text/html'});
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+        }
+    });
+    
+    // --- INITIALIZE ---
+    window.onload = () => {
+        loadFolderBtn.addEventListener('click', () => folderInput.click());
+        folderInput.addEventListener('change', handleFolderSelect);
+        saveBtn.addEventListener('click', saveFile);
+
+        initEditor(htmlEditor, htmlHighlighter);
+        initEditor(cssEditor, cssHighlighter);
+        updateButtonAppearance();
+        loadApiKey();
+        setupAiSystemPrompt();
+
+        htmlEditor.value = `<h1 class="main-title">AI搭載エディタへようこそ</h1>\n<p class="sample-text">Gemini APIキーを設定して、AIアシスタント機能をお試しください。</p>\n<p>または、「フォルダを読み込む」からローカルのプロジェクトを開始します。</p>\n<div id="sample-box" style="background: lightskyblue;">\n  <span>このフォントは Kiwi Maru です！</span>\n</div>`;
+        htmlEditor.disabled = false;
+        cssEditor.value = `/* Google Fontsをインポートしておくと、より多くのフォントが利用できます */\n\nbody {\n\tfont-family: "Noto Sans JP", sans-serif;\n\tbackground-color: #f8f9fa;\n}\n\n.main-title {\n\tpadding: 10px 15px;\n\tborder-bottom: 3px solid #0056b3;\n\tcolor: #333;\n}\n\n#sample-box {\n\tfont-family: "Kiwi Maru", "Noto Serif JP", serif;\n\tmargin: 20px auto;\n\tpadding: 30px 20px;\n\tborder: 1px solid #dee2e6;\n\tborder-radius: 8px;\n\tbackground-color: #ffffff;\n\tbox-shadow: 0 2px 4px rgba(0,0,0,0.1);\n\ttext-align: center;\n\tmax-width: 600px;\n}`;
+        cssEditor.disabled = false;
+        
+        forceRecordState('html');
+        forceRecordState('css');
+        updateUndoRedoButtons();
+
+        htmlEditor.addEventListener('focus', () => { lastFocusedEditorType = 'html'; updateUndoRedoButtons(); });
+        cssEditor.addEventListener('focus', () => { lastFocusedEditorType = 'css'; updateUndoRedoButtons(); });
+
+        handleHtmlInput();
+        handleCssInput();
+    };
+
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+            let handled = false;
+            if (e.key.toLowerCase() === 'z') { 
+                if (e.shiftKey) { redo(lastFocusedEditorType); } else { undo(lastFocusedEditorType); }
+                handled = true;
+            } else if (e.key.toLowerCase() === 'y') {
+                redo(lastFocusedEditorType);
+                handled = true;
+            } else if (e.key.toLowerCase() === 's') {
+                if (!saveBtn.disabled) { saveFile(); }
+                handled = true;
+            }
+            if (handled) {
+                e.preventDefault();
+            }
+        }
+    });
+</script>
+</body>
+</html>
