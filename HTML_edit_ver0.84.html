@@ -543,6 +543,13 @@
             processedFiles++;
             if (processedFiles === files.length) {
                 renderFileTree();
+                
+                // デバッグ情報を出力
+                console.log('Project loaded successfully!');
+                console.log('Base folder:', projectBaseFolder);
+                console.log('Loaded files:', Object.keys(projectFiles));
+                console.log('Files with object URLs:', Object.keys(projectFiles).filter(p => projectFiles[p].objectURL));
+                
                 const firstHtml = Object.keys(projectFiles).find(p => projectFiles[p].type === 'html');
                 if (firstHtml) {
                     openFileInEditor(firstHtml);
