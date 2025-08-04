@@ -1094,6 +1094,9 @@
     
     // --- INITIALIZE ---
     window.onload = () => {
+        // リサイズ機能を初期化
+        initializeResizeHandles();
+        
         loadFolderBtn.addEventListener('click', () => folderInput.click());
         folderInput.addEventListener('change', handleFolderSelect);
         saveBtn.addEventListener('click', saveFile);
