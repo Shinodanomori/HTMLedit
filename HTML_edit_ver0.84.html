@@ -1016,11 +1016,106 @@
     document.getElementById("export-combined").addEventListener("click",() => { downloadFile('combined.html', getFullHtmlContent(), 'text/html;charset=utf-8'); });
     openPreviewBtn.addEventListener("click", () => {
         try {
-            // 常に現在のエディタ内容を使用してプレビューを生成
-            const previewContent = getFullHtmlContent();
-            console.log("プレビュー内容生成:", previewContent.substring(0, 200) + "...");
+            let previewContent;
             
-            const blob = new Blob([previewContent], {type: 'text/html'});
+            // プロジェクトファイルが読み込まれている場合の処理を改善
+            if (Object.keys(projectFiles).length > 0 && previewTargetHtmlPath) {
+                console.log("プロジェクトファイルを使用してプレビューを生成");
+                const fileData = projectFiles[previewTargetHtmlPath];
+                
+                // Use the live content from the editor if it's the active file
+                const bodyContent = (activeFilePath === previewTargetHtmlPath && fileData.type === 'html')
+                    ? htmlEditor.value
+                    : fileData.originalBody;
+
+                // Reconstruct the full HTML from its parts
+                let fullHtmlString = `<!DOCTYPE html><html lang="ja"><head>${fileData.originalHead}</head>${fileData.bodyTag}${bodyContent}</body></html>`;
+                
+                // プロジェクトファイル内の相対パスを解決してbase64データURLに変換
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(fullHtmlString, "text/html");
+
+                // CSS ファイルの処理を追加
+                doc.querySelectorAll('link[rel="stylesheet"]').forEach(linkEl => {
+                    const href = linkEl.getAttribute('href');
+                    if (href && !href.startsWith('http') && !href.startsWith('data:') && !href.startsWith('#')) {
+                        const resolvedPath = resolveRelativePath(previewTargetHtmlPath, href);
+                        if (projectFiles[resolvedPath] && projectFiles[resolvedPath].content) {
+                            // CSSファイルの内容を<style>タグとして埋め込み
+                            const styleEl = doc.createElement('style');
+                            styleEl.textContent = projectFiles[resolvedPath].content;
+                            doc.head.appendChild(styleEl);
+                            linkEl.remove(); // 元のlinkタグを削除
+                            console.log(`✓ CSS embedded: ${resolvedPath}`);
+                        } else {
+                            console.warn(`✗ Could not find CSS file: ${href} (resolved to: ${resolvedPath})`);
+                        }
+                    }
+                });
+
+                // 画像とその他のリソースのBase64変換
+                const processResourcePromises = [];
+                doc.querySelectorAll('[src], [href]').forEach(el => {
+                    const attributeName = el.hasAttribute('href') ? 'href' : 'src';
+                    const originalPath = el.getAttribute(attributeName);
+
+                    if (!originalPath || originalPath.startsWith('http') || originalPath.startsWith('data:') || 
+                        originalPath.startsWith('blob:') || originalPath.startsWith('#') || 
+                        originalPath.startsWith('/') || el.tagName.toLowerCase() === 'link') {
+                        return; // Skip absolute paths, data URIs, blob URLs, anchors, and links (already processed)
+                    }
+
+                    const resolvedPath = resolveRelativePath(previewTargetHtmlPath, originalPath);
+                    const fileData = projectFiles[resolvedPath];
+                    
+                    if (fileData && fileData.file) {
+                        // ファイルをBase64データURLに変換
+                        const promise = new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                el.setAttribute(attributeName, e.target.result);
+                                console.log(`✓ Converted to data URL: ${resolvedPath}`);
+                                resolve();
+                            };
+                            reader.onerror = () => {
+                                console.warn(`✗ Failed to convert: ${resolvedPath}`);
+                                resolve();
+                            };
+                            reader.readAsDataURL(fileData.file);
+                        });
+                        processResourcePromises.push(promise);
+                    } else {
+                        console.warn(`✗ Could not find file: ${originalPath} (resolved to: ${resolvedPath})`);
+                    }
+                });
+
+                // 全ての変換が完了してからプレビューを開く
+                Promise.all(processResourcePromises).then(() => {
+                    previewContent = doc.documentElement.outerHTML;
+                    openPreviewWindow(previewContent);
+                });
+                return; // Promise処理なのでここでreturn
+                
+            } else {
+                // プロジェクトが読み込まれていない場合の従来の処理
+                console.log("エディタ内容を使用してプレビューを生成");
+                previewContent = getFullHtmlContent();
+            }
+            
+            openPreviewWindow(previewContent);
+            
+        } catch (error) {
+            console.error("プレビュー生成エラー:", error);
+            alert("プレビューの生成中にエラーが発生しました: " + error.message);
+        }
+    });
+    
+    // プレビューウィンドウを開く共通関数
+    function openPreviewWindow(content) {
+        try {
+            console.log("プレビュー内容生成完了:", content.substring(0, 200) + "...");
+            
+            const blob = new Blob([content], {type: 'text/html'});
             const url = URL.createObjectURL(blob);
             
             // 新しいタブで開く
@@ -1029,15 +1124,15 @@
             if (newWindow) {
                 console.log("✓ プレビューが新しいタブで開かれました");
                 // 一定時間後にblobURLを解放（メモリリーク防止）
-                setTimeout(() => URL.revokeObjectURL(url), 10000);
+                setTimeout(() => URL.revokeObjectURL(url), 30000); // 時間を延長
             } else {
                 alert("ポップアップがブロックされました。ブラウザの設定を確認してください。");
             }
         } catch (error) {
-            console.error("プレビュー生成エラー:", error);
-            alert("プレビューの生成中にエラーが発生しました。");
+            console.error("プレビューウィンドウ生成エラー:", error);
+            alert("プレビューウィンドウの生成中にエラーが発生しました: " + error.message);
         }
-    });
+    }
     
     // --- RESIZE FUNCTIONALITY ---
     function initializeResizeHandles() {
