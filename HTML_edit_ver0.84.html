@@ -28,9 +28,16 @@
             background: transparent;
             cursor: col-resize;
             z-index: 500;
+            border-left: 2px solid transparent;
+            transition: background-color 0.2s, border-color 0.2s;
         }
         .resize-handle:hover {
             background: rgba(0, 123, 255, 0.3);
+            border-left-color: rgba(0, 123, 255, 0.6);
+        }
+        .resize-handle:active {
+            background: rgba(0, 123, 255, 0.5);
+            border-left-color: rgba(0, 123, 255, 0.8);
         }
         #open-preview-btn {
             position: absolute; top: 10px; right: 10px; z-index: 1000; background-color: var(--primary-color);
