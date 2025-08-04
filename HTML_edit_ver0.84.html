@@ -802,7 +802,18 @@
                 if (projectFiles[resolvedPath] && projectFiles[resolvedPath].objectURL) {
                     el.setAttribute(attributeName, projectFiles[resolvedPath].objectURL);
                 } else {
-                    console.warn(`Could not find a loaded file for path: ${originalPath} (resolved to: ${resolvedPath})`);
+                    // プロジェクトフォルダ内でファイルを検索（大文字小文字を区別しない）
+                    const matchingPath = Object.keys(projectFiles).find(path => 
+                        path.toLowerCase() === resolvedPath.toLowerCase() && 
+                        projectFiles[path].objectURL
+                    );
+                    
+                    if (matchingPath) {
+                        el.setAttribute(attributeName, projectFiles[matchingPath].objectURL);
+                    } else {
+                        console.warn(`Could not find a loaded file for path: ${originalPath} (resolved to: ${resolvedPath})`);
+                        console.log('Available files:', Object.keys(projectFiles).filter(p => projectFiles[p].objectURL));
+                    }
                 }
             });
 
