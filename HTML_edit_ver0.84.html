@@ -1024,6 +1024,74 @@
         }
     });
     
+    // --- RESIZE FUNCTIONALITY ---
+    function initializeResizeHandles() {
+        const resizeHandle = document.querySelector('.resize-handle');
+        const container = document.querySelector('.container');
+        const editorPane = document.querySelector('.editor-pane');
+        const previewPane = document.querySelector('.preview-pane-wrapper');
+        
+        let isResizing = false;
+        
+        resizeHandle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            
+            const containerRect = container.getBoundingClientRect();
+            const newEditorWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+            
+            // 制限: 20%から80%の間
+            if (newEditorWidth >= 20 && newEditorWidth <= 80) {
+                editorPane.style.width = newEditorWidth + '%';
+                previewPane.style.width = (100 - newEditorWidth) + '%';
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
+        
+        // エディタのverticalリサイズ機能を改善
+        const htmlWrapper = document.getElementById('html-editor-wrapper');
+        const cssWrapper = document.getElementById('css-editor-wrapper');
+        
+        // ResizeObserverでエディタのサイズ変更を監視
+        if (window.ResizeObserver) {
+            const resizeObserver = new ResizeObserver(entries => {
+                for (let entry of entries) {
+                    // ハイライター要素のサイズもテキストエリアに合わせる
+                    const wrapper = entry.target;
+                    if (wrapper.id === 'html-editor-wrapper') {
+                        const highlighter = wrapper.querySelector('#html-highlighter');
+                        const textarea = wrapper.querySelector('#html-editor');
+                        if (highlighter && textarea) {
+                            highlighter.style.height = textarea.offsetHeight + 'px';
+                        }
+                    } else if (wrapper.id === 'css-editor-wrapper') {
+                        const highlighter = wrapper.querySelector('#css-highlighter');
+                        const textarea = wrapper.querySelector('#css-editor');
+                        if (highlighter && textarea) {
+                            highlighter.style.height = textarea.offsetHeight + 'px';
+                        }
+                    }
+                }
+            });
+            
+            resizeObserver.observe(htmlWrapper);
+            resizeObserver.observe(cssWrapper);
+        }
+    }
+    
     // --- INITIALIZE ---
     window.onload = () => {
         loadFolderBtn.addEventListener('click', () => folderInput.click());
